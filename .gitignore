@@ -1,0 +1,12 @@
+# Distribution / packaging
+bin/
+build/
+dist/
+lib/
+lib64/
+parts/
+sdist/
+var/
+.installed.cfg
+netflix dataset/
+.venv/
