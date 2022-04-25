@@ -109,7 +109,7 @@ print(myaccessiblething.nnz)
 print(myaccessiblething.indices)
 print(myaccessiblething.indptr)
 print("blub")
-gamma = 100
+gamma = 50
 
 # Calculate columnNorm: linalg.norm(userRowsMovieColumns.getcol(movieIdx)), e.g. movieID 1 = first el
 # column norm for movieID 1 = linalg.norm(userRowsMovieColumns.getcol(1))
@@ -229,6 +229,11 @@ print(approximatedAtransposeA)
 
 realAtransposeA = userRowsMovieColumns.transpose().dot(userRowsMovieColumns)
 print(realAtransposeA.toarray())
+
+# Calculate Mean Squared Error (MSE)
+# formula: MSE = 1 / n * SUM(actual - forecast)^2
+mse = (np.square(realAtransposeA - approximatedAtransposeA)).mean(axis=None)
+print("Mean Squared Error is: ", mse)
 
 
 
