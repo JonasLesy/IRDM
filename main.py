@@ -292,3 +292,44 @@ print("Mean Squared Error is: ", mse)
 # Step 3: also compute exact A^T A by using A with SciPy.sparse library
 
 # Step 4: compare our approximation with calculated one by using MSE & compare values
+
+
+
+
+############
+#  TASK 3  #
+############
+print(movieRowsUserColumns)
+movieRowsUserColumns = coo_matrix((ratings, (movieIDs, userIDs)), dtype=float)
+movieRowsUserColumns = movieRowsUserColumns.tocsc()
+print(movieRowsUserColumns.toarray())
+print(movieRowsUserColumns.shape[0],movieRowsUserColumns.shape[1])
+
+# get svd summarization
+matrixU, Sigma, Vt = linalg.svds(movieRowsUserColumns, k = (min(movieRowsUserColumns.shape[0],movieRowsUserColumns.shape[1]) - 2))
+print("U is")
+print(np.matrix.round(matrixU, 3))
+print("Sigma is")
+print(np.matrix.round(Sigma, 3))
+print("Vt is")
+print(np.matrix.round(Vt, 3))
+
+# R = movieRowsUserColumns
+# Q = matrixU
+# Pt = Sigma * Vt
+
+# R ~= Q * Pt
+# => to approximate an element we don't know, we need to get that element from the R matrix
+# e.g. element 2,5 = take the product of all elements on row 2 in Q and all elements on column 5 in Pt and sum all those products = R[2,5]
+
+"""
+mymatrix = coo_matrix(np.matrix([[1, 0, 0, 0, 2], [0, 0, 3, 0, 0], [0, 0, 0, 0, 0], [0, 2, 0, 0, 0]]), dtype=float)
+print(mymatrix)
+matrixU, Sigma, Vt = linalg.svds(mymatrix.tocsr(), k = 3)
+print("U is")
+print(matrixU)
+print("Sigma is")
+print(Sigma)
+print("Vt is")
+print(Vt)
+"""
