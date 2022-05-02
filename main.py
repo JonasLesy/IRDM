@@ -9,61 +9,40 @@ from scipy.sparse import linalg
 import random
 import itertools
 import math
+import time
+import io
 
 print("Welcome to the Information Retrieval & Data Mining assignment")
 print("Made by Jonas Lesy & Thomas Bytebier")
 
+start_time = time.time()
 
-movieIDs = []
-userIDs = []
-ratings = []
+movieIDs, userIDs, ratings = [], [], []
 
-# To read the input files, we're going to use regular expressions to make a distinction
-# between a movieID line & a line that contains a rating given by a user
-rx_dict = {
-    'movieID': re.compile(r'(?P<movieID>(\d+)):\n'),
-    'rating': re.compile(r'(?P<userID>(\d+)),(?P<rating>(\d)),(?P<date>(\d){4}-(\d){2}-(\d){2})(\n)?')
-}
+def parse_file(file, movies, users, ratings):
+    with io.open(file, "r") as f:
+        last_movie = 0
 
-def _parse_line(line):
-    """
-    Do a regex search against all defined regexes and
-    return the key and match result of the first matching regex
+        for line in f:
+            if ":" in line:
+                last_movie = int(line.split(":")[0])
+            else:
+                split_line = line.split(",")
+                movies.append(last_movie)
+                users.append(int(split_line[0]))
+                ratings.append(int(split_line[1]))
 
-    """
 
-    for key, rx in rx_dict.items():
-        match = rx.search(line)
-        if match:
-            return key, match
-    # if there are no matches
-    return None, None
-
-def parse_file(filename):
-    with open(filename, 'r') as file_object:
-        line = file_object.readline()
-        while line:
-            # at each line check for a match with a regex
-            key, match = _parse_line(line)
-
-            # extract school name
-            if key == 'movieID':
-                movieID = int(match.group('movieID'))
-
-            # extract grade
-            if key == 'rating':
-                rating = int(match.group('rating'))
-                userID = int(match.group('userID'))
-                movieIDs.append(movieID)
-                userIDs.append(userID)
-                ratings.append(rating)
-                #print('Rating for movie with id ' + movieID + ' is ' + rating + ' given by user ' + userID)
-            
-            
-            line = file_object.readline()
-    return
-
-parse_file('./netflix dataset/combined_data_smallest.txt')
+#parse_file('./netflix dataset/combined_data_smaller.txt')
+parse_file('./netflix dataset/combined_data_1million.txt', movieIDs, userIDs, ratings)
+#parse_file('./netflix dataset/combined_data_1.txt', movieIDs, userIDs, ratings)
+#parse_file('./netflix dataset/combined_data_2.txt', movieIDs, userIDs, ratings)
+#parse_file('./netflix dataset/combined_data_3.txt', movieIDs, userIDs, ratings)
+#parse_file('./netflix dataset/combined_data_4.txt', movieIDs, userIDs, ratings)
+#parse_file('./netflix dataset/combined_data_1.txt')
+#parse_file('./netflix dataset/combined_data_2.txt')
+#parse_file('./netflix dataset/combined_data_3.txt')
+#parse_file('./netflix dataset/combined_data_4.txt')
 
 #print(movieIDs)
 #print(userIDs)
@@ -75,6 +54,11 @@ parse_file('./netflix dataset/combined_data_smallest.txt')
 #userIDArray = np.array(userIDs)
 #row = np.array(movieIDs)
 #col = np.array(userIDs)
+
+# For performance boost
+ratings = np.asarray(ratings)
+movieIDs = np.asarray(movieIDs)
+userIDs = np.asarray(userIDs)
 movieRowsUserColumns = coo_matrix((ratings, (movieIDs, userIDs)))
 movieRowsUserColumns = movieRowsUserColumns.tocsr()
 userRowsMovieColumns = coo_matrix((ratings, (userIDs, movieIDs)))
@@ -89,37 +73,46 @@ print('Size of sparse MxU coo_matrix: '+ '%3.2f' %sparse_mxu_matrix_size + ' MB'
 sparse_uxm_matrix_size = userRowsMovieColumns.data.size/(1024**2)
 print('Size of sparse UxM coo_matrix: '+ '%3.2f' %sparse_uxm_matrix_size + ' MB')
 print("Sparse matrix users x movies is:")
-print(userRowsMovieColumns)
+#print(userRowsMovieColumns)
 #print("\n\n")
+
+print("--- Task 1 took %s seconds ---" % (time.time() - start_time))
 
 print("\n")
 
 #################
 #  DIMSUM CODE  #
-#################
-mycustomthing = coo_matrix((ratings, (userIDs, movieIDs)))
-myaccessiblething = mycustomthing.tocsr()
-print('Custom:')
-print(mycustomthing)
-print('hello')
-print(myaccessiblething.nonzero())
+
+"""
 print(myaccessiblething.shape)
 print(myaccessiblething.ndim)
 print(myaccessiblething.nnz)
 print(myaccessiblething.indices)
 print(myaccessiblething.indptr)
 print("blub")
-gamma = 50
+"""
+gamma = 500
 
 # Calculate columnNorm: linalg.norm(userRowsMovieColumns.getcol(movieIdx)), e.g. movieID 1 = first el
 # column norm for movieID 1 = linalg.norm(userRowsMovieColumns.getcol(1))
 
-for row in zip(userRowsMovieColumns.nonzero()):
-    print(row)
+start_time = time.time()
 
-columnNorms = []
-for i in range(len(movieIDs)):
-    columnNorms.append(linalg.norm(userRowsMovieColumns.getcol(i)))
+#columnNorms = []
+#for i in range(max(movieIDs)+1):
+#    columnNorms.append(linalg.norm(userRowsMovieColumns.getcol(i)))
+
+nonzero_rows, nonzero_cols = userRowsMovieColumns.nonzero()
+unq_nonzero_rows = np.unique(nonzero_rows)
+unq_nonzero_cols = np.unique(nonzero_cols)
+
+columnNorms = {}
+for c in unq_nonzero_cols:
+    columnNorms[c] = linalg.norm(userRowsMovieColumns[:,c])
+
+
+print("Highest norms = ", max(columnNorms))
+  
     #print(userRowsMovieColumns.getcol(i))
     #print("movie on index " + str(i) + " is " + str(movieIDs[i]))
 
@@ -149,8 +142,13 @@ for i in range(len(movieIDs)):
 # userRowsMovieColumns.getrow(1000).data
 
 
-print(userIDs)
-print(columnNorms)
+#print(userIDs)
+print("Got column norms")
+print(len(columnNorms))
+
+print("--- Column norms took %s seconds ---" % (time.time() - start_time))
+
+
     #mysum = 0
     #for user in userIDs:
     #    print("user is " + str(user))
@@ -159,10 +157,7 @@ print(columnNorms)
         #mysum += (myaccessiblething.data[user] ** 2)
     #columnNorms.append(math.sqrt(mysum))
     
-print("Column norms")
-print(columnNorms)
 
-print("Printing userentries")
 #for i in range(0, userRowsMovieColumns.shape[0]):
 #    print(userRowsMovieColumns.getrow(i))
 #for i in range(len(userIDs)):
@@ -175,6 +170,7 @@ def dimsumMap(i):
     currentRow = userRowsMovieColumns.getrow(i)
     #currentRow.indices = [1, 3] = MOVIEIDS
     #currentRow.data = [3, 4] = RATINGS
+    #print("indices are ", currentRow.indices)
 
     emissions = {}
 
@@ -182,14 +178,12 @@ def dimsumMap(i):
     for iterationJ, movieJ in enumerate(currentRow.indices):
         for iterationK, movieK in enumerate(currentRow.indices):
             if random.random() < min(1, gamma / (columnNorms[movieJ] * columnNorms[movieK])):
-                print("inverseColumnProbability for j ", iterationJ, " k ", iterationK, " is", 1 / (columnNorms[movieJ] * columnNorms[movieK]))
-                
                 emissions[(movieJ, movieK)] = userRowsMovieColumns[user, movieJ] * userRowsMovieColumns[user, movieK]
 
     return emissions
 
 def dimsumReduce(emission, Bmatrix):
-    print("Got emission ", emission)
+    #print("Got emission ", emission)
     for element in emission:
         (aij, aik) = element
         inverseColNorms = 1 / (columnNorms[aij] * columnNorms[aik])
@@ -203,38 +197,46 @@ def dimsumReduce(emission, Bmatrix):
         #print("Got element ", emission[element], "on position ", aij, " and ", aik)
 
 def getMatrixDFromNorms(columnNorms):
-    numberOfMovies = len(columnNorms)
+    numberOfMovies = max(columnNorms) + 1
     Dmatrix = np.zeros(shape = (numberOfMovies, numberOfMovies))
-    np.fill_diagonal(Dmatrix, columnNorms)
+    for key in columnNorms:
+        Dmatrix[key, key] = columnNorms[key]
     return Dmatrix
     
 print("done")
+Dmatrix = getMatrixDFromNorms(columnNorms)
+#print(Dmatrix)
 
 numberOfMovies = np.amax(movieIDs) + 1 # account for 0 column
 Bmatrix = np.zeros(shape = (numberOfMovies, numberOfMovies))
-print(Bmatrix)
+print("Made Bmatrix: ")
+#print(Bmatrix)
+print("Running mapreduce...")
 for user in np.unique(userIDs):
     mapEmissions = dimsumMap(user)
+    #print("emission is ", mapEmissions)
     dimsumReduce(mapEmissions, Bmatrix)
 
-def calculateRealAtransposeA(sparse_matrix):
-    transpose = sparse_matrix.transpose()
-    return transpose
+#print(Bmatrix)
+#print(Dmatrix)
 
-Dmatrix = getMatrixDFromNorms(columnNorms)
-print(Bmatrix)
-print(Dmatrix)
-approximatedAtransposeA = Dmatrix * Bmatrix * Dmatrix
-print(approximatedAtransposeA)
+print("Done!")
 
+#print(Bmatrix)
+#print(Dmatrix)
+approximatedAtransposeA = np.matmul(np.matmul(Dmatrix, Bmatrix), Dmatrix)
+#print(approximatedAtransposeA)
+
+print("Calculating real A^T * A...")
 realAtransposeA = userRowsMovieColumns.transpose().dot(userRowsMovieColumns)
-print(realAtransposeA.toarray())
+#print(realAtransposeA.toarray())
+print("...done!")
 
 # Calculate Mean Squared Error (MSE)
 # formula: MSE = 1 / n * SUM(actual - forecast)^2
+print("Calculating MSE...")
 mse = (np.square(realAtransposeA - approximatedAtransposeA)).mean(axis=None)
 print("Mean Squared Error is: ", mse)
-
 
 
 
@@ -293,12 +295,17 @@ print("Mean Squared Error is: ", mse)
 
 # Step 4: compare our approximation with calculated one by using MSE & compare values
 
+print("--- Task 2 took %s seconds ---" % (time.time() - start_time))
 
-
+"""
 
 ############
 #  TASK 3  #
 ############
+print('\n\n')
+print("############\n", "#  TASK 3  #\n", "############\n\n")
+
+
 print(movieRowsUserColumns)
 movieRowsUserColumns = coo_matrix((ratings, (movieIDs, userIDs)), dtype=float)
 movieRowsUserColumns = movieRowsUserColumns.tocsc()
@@ -321,6 +328,8 @@ print(np.matrix.round(Vt, 3))
 # R ~= Q * Pt
 # => to approximate an element we don't know, we need to get that element from the R matrix
 # e.g. element 2,5 = take the product of all elements on row 2 in Q and all elements on column 5 in Pt and sum all those products = R[2,5]
+
+"""
 
 """
 mymatrix = coo_matrix(np.matrix([[1, 0, 0, 0, 2], [0, 0, 3, 0, 0], [0, 0, 0, 0, 0], [0, 2, 0, 0, 0]]), dtype=float)

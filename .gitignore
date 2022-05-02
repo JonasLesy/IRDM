@@ -12,4 +12,5 @@ netflix dataset/combined_data_1.txt
 netflix dataset/combined_data_2.txt
 netflix dataset/combined_data_3.txt
 netflix dataset/combined_data_4.txt
+netflix dataset/combined_data_1million.txt
 .venv/
