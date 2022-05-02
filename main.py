@@ -34,7 +34,7 @@ def parse_file(file, movies, users, ratings):
 
 
 #parse_file('./netflix dataset/combined_data_smaller.txt')
-parse_file('./netflix dataset/combined_data_1million.txt', movieIDs, userIDs, ratings)
+parse_file('./netflix dataset/combined_data_100thousand.txt', movieIDs, userIDs, ratings)
 #parse_file('./netflix dataset/combined_data_1.txt', movieIDs, userIDs, ratings)
 #parse_file('./netflix dataset/combined_data_2.txt', movieIDs, userIDs, ratings)
 #parse_file('./netflix dataset/combined_data_3.txt', movieIDs, userIDs, ratings)
@@ -147,6 +147,7 @@ print("Got column norms")
 print(len(columnNorms))
 
 print("--- Column norms took %s seconds ---" % (time.time() - start_time))
+print("Gamma is ", gamma)
 
 
     #mysum = 0
@@ -203,15 +204,15 @@ def getMatrixDFromNorms(columnNorms):
         Dmatrix[key, key] = columnNorms[key]
     return Dmatrix
     
-print("done")
 Dmatrix = getMatrixDFromNorms(columnNorms)
+
 #print(Dmatrix)
 
 numberOfMovies = np.amax(movieIDs) + 1 # account for 0 column
 Bmatrix = np.zeros(shape = (numberOfMovies, numberOfMovies))
-print("Made Bmatrix: ")
 #print(Bmatrix)
-print("Running mapreduce...")
+start_time = time.time()
+
 for user in np.unique(userIDs):
     mapEmissions = dimsumMap(user)
     #print("emission is ", mapEmissions)
@@ -220,8 +221,9 @@ for user in np.unique(userIDs):
 #print(Bmatrix)
 #print(Dmatrix)
 
-print("Done!")
 
+print("--- Mapreduce took %s seconds ---" % (time.time() - start_time))
+start_time = time.time()
 #print(Bmatrix)
 #print(Dmatrix)
 approximatedAtransposeA = np.matmul(np.matmul(Dmatrix, Bmatrix), Dmatrix)
@@ -295,7 +297,7 @@ print("Mean Squared Error is: ", mse)
 
 # Step 4: compare our approximation with calculated one by using MSE & compare values
 
-print("--- Task 2 took %s seconds ---" % (time.time() - start_time))
+print("--- Last part of Task 2 took %s seconds ---" % (time.time() - start_time))
 
 """
 
