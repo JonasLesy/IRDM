@@ -142,6 +142,9 @@ def get_and_print_time(msg, prev):
         if msg is not None:
             text += "  " + msg
 
+# Program
+def program():
+    movies, users, ratings = [], [], []
         print(text)
 
         return now
