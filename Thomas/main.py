@@ -82,30 +82,24 @@ def dimsum_mapper(matrix, norms, rows, gamma):
 
 
 def dimsum_reducer(emissions, nr_of_movies):
-    # def r(m):
-    #     print(m)
-    #     print(len(m))
-
-    # functools.reduce(r, emissions)
-
     reducer_result = functools.reduce(operator.add, emissions)
 
-    # #b_matrix = np.zeros(shape = (nr_of_movies, nr_of_movies))
-    # b_matrix = lil_matrix((nr_of_movies, nr_of_movies))
+    #b_matrix = np.zeros(shape = (nr_of_movies, nr_of_movies))
+    b_matrix = lil_matrix((nr_of_movies, nr_of_movies))
 
-    # for k, v in reducer_result.items():
-    #     i = k[0]
-    #     j = k[1]
-    #     n = norms[i] * norms[j]
+    for k, v in reducer_result.items():
+        i = k[0]
+        j = k[1]
+        n = norms[i] * norms[j]
 
-    #     if (gamma / n ) > 1:
-    #         value = v / n
-    #     else:
-    #         value = v / gamma
+        if (gamma / n ) > 1:
+            value = v / n
+        else:
+            value = v / gamma
         
-    #     b_matrix[i, j] = b_matrix[i, j] + value
+        b_matrix[i, j] = b_matrix[i, j] + value
     
-    # return b_matrix
+    return b_matrix
 
 
 def approximate_atranspose_a(b_matrix, norms, nr_of_movies):
@@ -142,9 +136,6 @@ def get_and_print_time(msg, prev):
         if msg is not None:
             text += "  " + msg
 
-# Program
-def program():
-    movies, users, ratings = [], [], []
         print(text)
 
         return now
@@ -152,18 +143,21 @@ def program():
 
 # Run
 movies, users, ratings = [], [], []
+mac = "/Users/thomasbytebier/Documents/School/IRDM/Project/netflix_dataset/"
+windows = "C:/Users/Thomas/Documents/School/Master/Information Retrieval and Data Mining/Project/netflix dataset/"
+folder = windows
 gamma = 100
 
 print()
 
 t1_start = get_and_print_time("Task 1", None)
-#parse_file("/Users/thomasbytebier/Documents/School/IRDM/Project/netflix_dataset/smallest.txt", movies, users, ratings)
-parse_file("/Users/thomasbytebier/Documents/School/IRDM/Project/netflix_dataset/small.txt", movies, users, ratings)
-#parse_file("/Users/thomasbytebier/Documents/School/IRDM/Project/netflix_dataset/medium.txt", movies, users, ratings)
-#parse_file("/Users/thomasbytebier/Documents/School/IRDM/Project/netflix_dataset/combined_data_1.txt", movies, users, ratings)
-#parse_file("/Users/thomasbytebier/Documents/School/IRDM/Project/netflix_dataset/combined_data_2.txt", movies, users, ratings)
-#parse_file("/Users/thomasbytebier/Documents/School/IRDM/Project/netflix_dataset/combined_data_3.txt", movies, users, ratings)
-#parse_file("/Users/thomasbytebier/Documents/School/IRDM/Project/netflix_dataset/combined_data_4.txt", movies, users, ratings)
+#parse_file(folder + "smallest.txt", movies, users, ratings)
+parse_file(folder + "small.txt", movies, users, ratings)
+#parse_file(folder + "medium.txt", movies, users, ratings)
+#parse_file(folder + "combined_data_1.txt", movies, users, ratings)
+#parse_file(folder + "combined_data_2.txt", movies, users, ratings)
+#parse_file(folder + "combined_data_3.txt", movies, users, ratings)
+#parse_file(folder + "combined_data_4.txt", movies, users, ratings)
 t1_read = get_and_print_time("Finished reading file", t1_start)
 movies_x_users, users_x_movies = create_sparse_matrices(movies, users, ratings)
 t1_sparse = get_and_print_time("Finished creating sparse matrices", t1_read)
