@@ -11,6 +11,7 @@ import itertools
 import math
 import time
 import io
+import gc
 
 print("Welcome to the Information Retrieval & Data Mining assignment")
 print("Made by Jonas Lesy & Thomas Bytebier")
@@ -150,50 +151,37 @@ print("--- Column norms took %s seconds ---" % (time.time() - start_time))
 print("Gamma is ", gamma)
 
 
-    #mysum = 0
-    #for user in userIDs:
-    #    print("user is " + str(user))
-    #    myaccessiblething.indptr[user]
-        #print(user)
-        #mysum += (myaccessiblething.data[user] ** 2)
-    #columnNorms.append(math.sqrt(mysum))
-    
-
-#for i in range(0, userRowsMovieColumns.shape[0]):
-#    print(userRowsMovieColumns.getrow(i))
-#for i in range(len(userIDs)):
-#    for m in range(len(movieIDs)):
-#        print(i, myaccessiblething.indices[m], myaccessiblething.data[m])
-
-
 # Map function gets a row, will possibly emit the product of any pair Aij Aik
-def dimsumMap(i):
+def dimsumMap(i, emissions):
     currentRow = userRowsMovieColumns.getrow(i)
     #currentRow.indices = [1, 3] = MOVIEIDS
     #currentRow.data = [3, 4] = RATINGS
     #print("indices are ", currentRow.indices)
 
-    emissions = {}
 
     # double loop through row to get pairs Aij & Aik:
     for iterationJ, movieJ in enumerate(currentRow.indices):
         for iterationK, movieK in enumerate(currentRow.indices):
             if random.random() < min(1, gamma / (columnNorms[movieJ] * columnNorms[movieK])):
-                emissions[(movieJ, movieK)] = userRowsMovieColumns[user, movieJ] * userRowsMovieColumns[user, movieK]
+                entryList = []
+                if (movieJ, movieK) in emissions:
+                    entryList = emissions[(movieJ, movieK)]
 
-    return emissions
+                entryList.append(userRowsMovieColumns[user, movieJ] * userRowsMovieColumns[user, movieK])
+                emissions[(movieJ, movieK)] = entryList
+                
 
-def dimsumReduce(emission, Bmatrix):
-    #print("Got emission ", emission)
-    for element in emission:
-        (aij, aik) = element
+def dimsumReduce(emissionKey, Bmatrix):
+    (aij, aik) = emissionKey
+    valueToSet = 0
+    for emissionEntry in emissions[emissionKey]:
         inverseColNorms = 1 / (columnNorms[aij] * columnNorms[aik])
         if (gamma * inverseColNorms) > 1:
-            valueToAdd = inverseColNorms * emission[element]
+            valueToSet += inverseColNorms * emissionEntry
         else:
-            valueToAdd = (1 / gamma) * emission[element]
+            valueToSet += (1 / gamma) * emissionEntry
         
-        Bmatrix[aij, aik] = Bmatrix[aij, aik] + valueToAdd
+    Bmatrix[aij, aik] = valueToSet
         #(aij, aik) = element
         #print("Got element ", emission[element], "on position ", aij, " and ", aik)
 
@@ -213,16 +201,29 @@ Bmatrix = np.zeros(shape = (numberOfMovies, numberOfMovies))
 #print(Bmatrix)
 start_time = time.time()
 
+emissions = {}
+map_time = time.time()
 for user in np.unique(userIDs):
-    mapEmissions = dimsumMap(user)
+    dimsumMap(user, emissions)
     #print("emission is ", mapEmissions)
-    dimsumReduce(mapEmissions, Bmatrix)
+print("--- Map took %s seconds ---" % (time.time() - map_time))
+
+print("Emissions are")
+gc.collect()
+#print(emissions)
+
+reduce_time = time.time()
+for key in emissions.keys():
+    dimsumReduce(key, Bmatrix)
+
+print("--- Reduce took %s seconds ---" % (time.time() - reduce_time))
 
 #print(Bmatrix)
 #print(Dmatrix)
 
 
 print("--- Mapreduce took %s seconds ---" % (time.time() - start_time))
+gc.collect()
 start_time = time.time()
 #print(Bmatrix)
 #print(Dmatrix)
