@@ -7,6 +7,8 @@ import collections, functools, operator
 import datetime as dt
 import numpy as np
 import random as r
+import matplotlib.pyplot as plt
+import multiprocessing
 from scipy.sparse import csr_matrix, csc_matrix, lil_matrix, diags
 from scipy.sparse import linalg
 
@@ -149,80 +151,70 @@ def get_and_print_time(msg, prev):
 
 
 def taak3(matrix):
+    def checkresults(org_matrix, new_matrix, unique_rows, file):
+        with open(file + '.txt', 'w') as testfile:
+            for r in unique_rows:
+                testfile.write(str(r) + ':\n')
+                row = org_matrix.getrow(r)
+                cols = row.indices
+                for c in cols:
+                    testfile.write(str(c) + ',' + str(round(new_matrix[r,c])) + '\n')
+
     # Summarize dataset with SVD.
-    k = matrix.shape[0] - 1
+    k = min(matrix.shape[0] - 1, 5)
     print('k=' + str(k))
     q_matrix, s, vt = linalg.svds(matrix, k = k)
-
+    
     # From SVD we can calculate the matrices Q and P, which are needed for the SGD algorithm.
     pt_matrix = diags(s) @ vt
-    # p_matrix = pt_matrix.transpose()
 
-    # print(np.asarray(matrix))
-    # print(matrix.toarray())
     nonzero_rows, nonzero_cols = matrix.nonzero()
-
-
     unique_rows = np.unique(nonzero_rows)
-
-    # print()
-    # print(matrix[1,:])
-    # print()
-
-    hyperparam_1 = 1
-    print()
-    print(q_matrix)
-    print()
-
+    hyperparam_1, hyperparam_2 = 1, 1
     gradient_step = 0.00001
-    for a in range(1):
-        for x in unique_rows:
-            row = matrix.getrow(x)
+    epochs = 1
+
+    checkresults(matrix, q_matrix @ pt_matrix, unique_rows, "before")
+
+    for a in range(epochs):
+        # Stochastic zou random moeten zijn, wij loopen er helemaal door, zou dat ok zijn?
+        # TODO: shuffle de unique_rows
+        for m in unique_rows:
+            #print("Epoch " + str(a) + ": " + str(m))
+            row = matrix.getrow(m)
             cols = row.indices
             
-            nabla_q = 0
-            
-            for i in cols:
+            for u in cols:
+                #print("Epoch " + str(a) + "| movie: " + str(m) + " - user: " + str(u))
+
+                nabla_q, nabla_p = 0, 0
+
                 for f in range(k):
-                    A = matrix[x,i]
-                    B = q_matrix[x,f]
-                    C = pt_matrix[f,i]
+                    A = matrix[m,u]
+                    B = q_matrix[m,:] @ pt_matrix[:,u]
+                    C = pt_matrix[f,u]
+                    D = q_matrix[m,f]
 
-                    nabla_q += -2 * (A - B*C) * C + 2*hyperparam_1*B
-                    #print(yyy)
+                    nabla_q += (-2 * (A - B) * C) + (2 * hyperparam_1 * D)
+                    nabla_p += (-2 * (A - B) * D) + (2 * hyperparam_1 * C)
+                
+                correction_curr_col = gradient_step * nabla_p
+                pt_matrix[:,u] = pt_matrix[:,u] - correction_curr_col
 
-            correction_curr_row = gradient_step * nabla_q
+                correction_curr_row = gradient_step * nabla_q
+                q_matrix[m,:] = q_matrix[m,:] - correction_curr_row
 
-            for f in range(k):
-                q_matrix[x,f] = q_matrix[x,f] - correction_curr_row
+    checkresults(matrix, q_matrix @ pt_matrix, unique_rows, "after")
 
+def plot():
+    # X axis parameter:
+    xaxis = np.array([2, 8])
 
-                # print(i, x, matrix[i,x])
-                # xxx = 2 * (matrix[i,x] - matrix[i,:] @ matrix[:,x])
+    # Y axis parameter:
+    yaxis = np.array([4, 9])
 
-    print(q_matrix)
-    print()    
-
-    
-    # A = matrix[x,i]
-    # B = Q[x,f]
-    # C = P[f,i]
-    # yyy = 2 * (A - B*C) * C + 2.lambda*B
-
-
-    # print(q_matrix)
-    # print()
-    # print(pt_matrix)
-    # print()
-    # result = q_matrix @ diags(s) @ vt
-    # print (result)
-
-
-
-
-
-    
-
+    plt.plot(xaxis, yaxis)
+    plt.show()
 
 
 
@@ -230,7 +222,7 @@ def taak3(matrix):
 movies, users, ratings = [], [], []
 mac = "/Users/thomasbytebier/Documents/School/IRDM/Project/netflix_dataset/"
 windows = "C:/Users/Thomas/Documents/School/Master/Information Retrieval and Data Mining/Project/netflix dataset/"
-folder = windows
+folder = mac
 gamma = 100
 
 print()
@@ -268,8 +260,7 @@ t1_finish = get_and_print_time("Finished task 1", t1_start)
 print()
 t3_start = get_and_print_time("Task 3", None)
 taak3(movies_x_users)
-
-
 t3_finish = get_and_print_time("Finished task 3", t3_start)
+
 
 get_and_print_time("Finished project", t1_start)
