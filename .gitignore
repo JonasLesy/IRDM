@@ -1,0 +1,17 @@
+# Distribution / packaging
+bin/
+build/
+dist/
+lib/
+lib64/
+parts/
+sdist/
+var/
+.installed.cfg
+netflix dataset/combined_data_1.txt
+netflix dataset/combined_data_2.txt
+netflix dataset/combined_data_3.txt
+netflix dataset/combined_data_4.txt
+.venv/
+combined_data_1million.txt
+combined_data_100thousand.txt

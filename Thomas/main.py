@@ -2,54 +2,87 @@
 # -*- coding: utf-8 -*-
 
 # Imports
+from importlib.metadata import files
 import io
 import collections, functools, operator
 import datetime as dt
+from readline import set_completer_delims
 import numpy as np
 import random as r
 import matplotlib.pyplot as plt
-import multiprocessing
-from scipy.sparse import csr_matrix, csc_matrix, lil_matrix, diags
+from scipy.sparse import csr_matrix, lil_matrix, diags
 from scipy.sparse import linalg
 
+################
+#    TASK 1    #
+################
 
-# Parse an input file.
+# Parse the given input file.
 # Lines that contain a number and a colon indicate a MovieID.
-# The following lines list, for that particular movie, UserIDs, 
-# a comma, a rating, a comma, then the date when the rating was done.
-def parse_file(file, movies, users, ratings):
+# The following lines list, for that particular movie:
+# UserIDs, a rating, the date when the rating was done.
+# The inputs are the filepath, empty movies array, empty users array, empty ratings array and a boolean to decide to limit the read entries to 200.
+# The method will read the input file and fill the three arrays accordingly, the date has no further use in this project
+#
+# The following entry rating of score 4 by user with ID 9999 for movie with ID 50 will be stored in 3 the arrays as follows:
+#            ----------------
+# movies =    ... | 50 | ...
+#            ----------------
+#            ----------------
+# users  =   ... | 9999 | ...
+#            ----------------
+#            ----------------
+# ratings =    ... | 4 | ...
+#            ----------------
+#                    ^ all have the same index in their respective array
+def parse_file(file, movies, users, ratings, limit_entries):
     with io.open(file, "r") as f:
         last_movie = 0
+        counter = 0
 
         for line in f:
-            if ":" in line:
-                last_movie = int(line.split(":")[0])
-            else:
-                # TODO: remove
-                if r.random() < 1:
-                    split_line = line.split(",")
-                    movies.append(last_movie)
-                    users.append(int(split_line[0]))
-                    ratings.append(int(split_line[1]))
+            if limit_entries and counter == 10000: # break the input parsing if enough items are read
+                break
+            if ":" in line: # the line is a movieID line
+                last_movie = int(line.split(":")[0]) 
+            else: # the line is a rating
+                split_line = line.split(",")
+                movies.append(last_movie)
+                users.append(int(split_line[0]))
+                ratings.append(int(split_line[1]))
+                counter += 1
 
 
-# Create two sparse matrices from three lists.
-# One that has movies rows and users columns, with the contents of the cells 
-# being the ratings given by the user for the movies, and one that has users
-# columns and movies rows.
+# Create two sparse matrices from the three lists (because the actual matrix would be too large for memory!).
+# One that has movies as rows and users as columns, with the contents of the cells being the ratings given by the user for the movies, 
+# And one that has users as columns and the movies as rows.
 def create_sparse_matrices(movies, users, ratings):
     # TODO: better performance using np-arrays, why?
     movies_array = np.asarray(movies)
     users_array = np.asarray(users)
     ratings_array = np.asarray(ratings)
 
+    # Create a sparse matrix with the rows representing the movies and the columns representing the users
     movies_x_users = csr_matrix((ratings_array, (movies_array, users_array)), dtype=float)
 
-    # TODO: transpose should be better than performing the create_matrix function(?)
-    users_x_movies = movies_x_users.transpose()
+    # Create a sparse matrix with the rows representing the users and the columns representing the movies
+    # Not used anymore because of transposition optimization (see line below)
+    users_x_movies = csr_matrix((ratings_array, (users_array, movies_array)), dtype=float)
+    #users_x_movies = movies_x_users.transpose()
 
     return movies_x_users, users_x_movies
 
+
+
+
+################
+#    TASK 2    #
+################
+# Notes:
+#   - use the users_x_movies matrix!!
+# Tasks:
+#   - Implement DIMSUM: maps users_x_movies -> matrix of cosine similarities B (size: |movies| x |movies|)
+#   - Compute approximation of A^T * A from this B
 
 # Calculate the exact A transpose * A operation.
 def calculate_atranspose_a(matrix_t, matrix):
@@ -129,26 +162,14 @@ def compare_atranspose_a(actual, approx):
     #     print("Approx: " + str(approx[l,l]))
 
 
-def get_and_print_time(msg, prev):
-    # Om printen makkelijk terug te kunnen uitschakelen.
-    if 1 == 1:
-        now = dt.datetime.now()
-        text = now.strftime("%H:%M:%S")
-        if prev is not None:
-            text += "  " + str(now - prev)
-        if msg is not None:
-            text += "  " + msg
-
-        print(text)
-
-        return now
 
 
 
 
 
-
-
+################
+#    TASK 3    #
+################
 
 def taak3(matrix):
     def checkresults(org_matrix, new_matrix, unique_rows, file):
@@ -217,27 +238,85 @@ def plot():
     plt.show()
 
 
+########################
+#    HELPER METHODS    #
+########################
 
-# Run
+# This method returns the current time, prints the given message,
+# and calculates the difference if a previous timestamp is provided
+def get_and_print_time(msg, prev):
+    now = dt.datetime.now()
+    text = now.strftime("%H:%M:%S")
+    if msg is not None:
+        text += "  " + msg
+    if prev is not None:
+        timedelta = now - prev # add the difference between now and previous to the message, if previous was given
+        hours, remainder = divmod(timedelta.seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        text += ": took " + str(hours) + "hours, " + str(minutes) + "minutes and " + str(seconds) + "seconds."
+
+    print(text)
+    return now
+
+
+#####################
+#    RUN SECTION    #
+#####################
+# Prepare the program for running task1, task2 & task3
 movies, users, ratings = [], [], []
-mac = "/Users/thomasbytebier/Documents/School/IRDM/Project/netflix_dataset/"
-windows = "C:/Users/Thomas/Documents/School/Master/Information Retrieval and Data Mining/Project/netflix dataset/"
-folder = mac
-gamma = 100
+datasetFolder = "./netflix dataset/"
+print("Current time - elapsed time since previous print")
 
-print()
-t1_start = get_and_print_time("Task 1", None)
+# TASK 1 - execution:
+# Parse the following input files:
+t1_start = get_and_print_time("Task 1", None) # retrieve (& print) current timestamp to measure task1 efficiency
+# Set the following boolean to True to only read the first 200 entries of each given file, set to False to read full files
+limit_entries = False
+parse_file(datasetFolder + "combined_data_1.txt", movies, users, ratings, limit_entries)
+parse_file(datasetFolder + "combined_data_2.txt", movies, users, ratings, limit_entries)
+parse_file(datasetFolder + "combined_data_3.txt", movies, users, ratings, limit_entries)
+parse_file(datasetFolder + "combined_data_4.txt", movies, users, ratings, limit_entries)
+t1_input_parsed = get_and_print_time("Finished reading input files", t1_start)
+
+# Use the movies, users & ratings arrays to create two sparse matrices.
+movies_x_users, users_x_movies = create_sparse_matrices(movies, users, ratings)
+t1_input_parsed = get_and_print_time("Finished creating both sparse matrices", t1_input_parsed)
+
+
+get_and_print_time("Finished all tasks", t1_start)
+
+#gamma = 100
+
+#print()
 #parse_file(folder + "smallest.txt", movies, users, ratings)
+
+
+
+# empirical
+#: download lots of files, analyse
+#statistical analysis, boxplots
+#+ well scoped
+# analysis tool: 
+#
+#
+#
+#
+#
+#
+#
 #parse_file(folder + "small.txt", movies, users, ratings)
-parse_file(folder + "medium.txt", movies, users, ratings)
+#
+
+
+# parse_file(folder + "medium.txt", movies, users, ratings)
 #parse_file(folder + "combined_data_1.txt", movies, users, ratings)
 #parse_file(folder + "combined_data_2.txt", movies, users, ratings)
 #parse_file(folder + "combined_data_3.txt", movies, users, ratings)
 #parse_file(folder + "combined_data_4.txt", movies, users, ratings)
-t1_read = get_and_print_time("Finished reading file", t1_start)
-movies_x_users, users_x_movies = create_sparse_matrices(movies, users, ratings)
-t1_sparse = get_and_print_time("Finished creating sparse matrices", t1_read)
-t1_finish = get_and_print_time("Finished task 1", t1_start)
+#t1_read = get_and_print_time("Finished reading file", t1_start)
+#movies_x_users, users_x_movies = create_sparse_matrices(movies, users, ratings)
+#t1_sparse = get_and_print_time("Finished creating sparse matrices", t1_read)
+#t1_finish = get_and_print_time("Finished task 1", t1_start)
 
 # print()
 # t2_start = get_and_print_time("Task 2", None)
@@ -257,10 +336,9 @@ t1_finish = get_and_print_time("Finished task 1", t1_start)
 # t2_compare = get_and_print_time("Finished comparison", t2_approximation)
 # t2_finish = get_and_print_time("Finished task 2", t2_start)
 
-print()
-t3_start = get_and_print_time("Task 3", None)
-taak3(movies_x_users)
-t3_finish = get_and_print_time("Finished task 3", t3_start)
+#print()
+#t3_start = get_and_print_time("Task 3", None)
+#taak3(movies_x_users)
+#t3_finish = get_and_print_time("Finished task 3", t3_start)
 
 
-get_and_print_time("Finished project", t1_start)
