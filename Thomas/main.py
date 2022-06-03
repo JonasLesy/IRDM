@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # Imports
+from cProfile import run
 from importlib.metadata import files
 import io
 import collections, functools, operator
@@ -35,13 +36,13 @@ from scipy.sparse import linalg
 # ratings =    ... | 4 | ...
 #            ----------------
 #                    ^ all have the same index in their respective array
-def parse_file(file, movies, users, ratings, limit_entries):
+def parse_file(file, movies, users, ratings, limit_entries, limit_size):
     with io.open(file, "r") as f:
         last_movie = 0
         counter = 0
 
         for line in f:
-            if limit_entries and counter == 10000: # break the input parsing if enough items are read
+            if limit_entries and counter == limit_size: # break the input parsing if enough items are read
                 break
             if ":" in line: # the line is a movieID line
                 last_movie = int(line.split(":")[0]) 
@@ -67,8 +68,8 @@ def create_sparse_matrices(movies, users, ratings):
 
     # Create a sparse matrix with the rows representing the users and the columns representing the movies
     # Not used anymore because of transposition optimization (see line below)
-    users_x_movies = csr_matrix((ratings_array, (users_array, movies_array)), dtype=float)
-    #users_x_movies = movies_x_users.transpose()
+    #users_x_movies = csr_matrix((ratings_array, (users_array, movies_array)), dtype=float)
+    users_x_movies = movies_x_users.transpose()
 
     return movies_x_users, users_x_movies
 
@@ -78,18 +79,9 @@ def create_sparse_matrices(movies, users, ratings):
 ################
 #    TASK 2    #
 ################
-# Notes:
-#   - use the users_x_movies matrix!!
-# Tasks:
-#   - Implement DIMSUM: maps users_x_movies -> matrix of cosine similarities B (size: |movies| x |movies|)
-#   - Compute approximation of A^T * A from this B
-
-# Calculate the exact A transpose * A operation.
-def calculate_atranspose_a(matrix_t, matrix):
-    return matrix_t @ matrix
-
 
 # Calculate the norms for a matrix given an array of columns which contain at least one value.
+# This method outputs a dictionary for easy retrieval of the column norms
 def calculate_vector_norm(matrix, cols):
     dict = {}
     for c in cols:
@@ -99,6 +91,7 @@ def calculate_vector_norm(matrix, cols):
 
 
 def dimsum_mapper(matrix, norms, rows, gamma):
+
     def m(i):
         row = matrix.getrow(i)
         cols = row.indices
@@ -106,21 +99,16 @@ def dimsum_mapper(matrix, norms, rows, gamma):
 
         for j in cols:
             for k in cols:
-                # TODO: should we store multiplication of the norms?
-                #       (Needed during the approximation of A transpose * A)
-                probability = min(1, gamma / (norms[j] * norms[k]))
-                if r.random() < probability:
+                if r.random() < min(1, gamma / (norms[j] * norms[k])):
                     emissions[(j, k)] = matrix[i, j] * matrix[i, k]
-
         return collections.Counter(emissions)
-
+    
     return map(m, rows)
 
 
 def dimsum_reducer(emissions, norms, nr_of_movies):
     reducer_result = functools.reduce(operator.add, emissions)
 
-    #b_matrix = np.zeros(shape = (nr_of_movies, nr_of_movies))
     b_matrix = lil_matrix((nr_of_movies, nr_of_movies))
 
     for k, v in reducer_result.items():
@@ -134,32 +122,17 @@ def dimsum_reducer(emissions, norms, nr_of_movies):
             value = v / gamma
         
         b_matrix[i, j] = b_matrix[i, j] + value
-    
+
     return b_matrix
 
 
 def approximate_atranspose_a(b_matrix, norms, nr_of_movies):
-    #d_matrix = np.zeros(shape = (nr_of_movies, nr_of_movies))
     d_matrix = lil_matrix((nr_of_movies, nr_of_movies))
     
     for n in norms:
         d_matrix[n, n] = norms[n]
     
     return d_matrix @ b_matrix @ d_matrix
-    #return np.matmul(np.matmul(d_matrix, b_matrix), d_matrix)
-    
-
-def compare_atranspose_a(actual, approx):
-    print("Comparing results")
-    
-    # print(actual.sorted_indices())
-    # print()
-    # print(approx.sorted_indices())
-
-    # list = [1, 2]#[10, 15, 123, 45, 78]
-    # for l in list:
-    #     print("Real: " + str(actual[l,l]))
-    #     print("Approx: " + str(approx[l,l]))
 
 
 
@@ -267,60 +240,93 @@ movies, users, ratings = [], [], []
 datasetFolder = "./netflix dataset/"
 print("Current time - elapsed time since previous print")
 
-# TASK 1 - execution:
+# TASK 1 - Loading the dataset:
+# Parameters:
+limit_entries = False # Set this boolean to True to only read the first 'limit_size' amount of entries of each given file, set to False to read full files
+limit_size = 10000
+
+# Execution:
 # Parse the following input files:
 t1_start = get_and_print_time("Task 1", None) # retrieve (& print) current timestamp to measure task1 efficiency
-# Set the following boolean to True to only read the first 200 entries of each given file, set to False to read full files
-limit_entries = False
-parse_file(datasetFolder + "combined_data_1.txt", movies, users, ratings, limit_entries)
-parse_file(datasetFolder + "combined_data_2.txt", movies, users, ratings, limit_entries)
-parse_file(datasetFolder + "combined_data_3.txt", movies, users, ratings, limit_entries)
-parse_file(datasetFolder + "combined_data_4.txt", movies, users, ratings, limit_entries)
+parse_file(datasetFolder + "combined_data_1.txt", movies, users, ratings, limit_entries, limit_size)
+parse_file(datasetFolder + "combined_data_2.txt", movies, users, ratings, limit_entries, limit_size)
+parse_file(datasetFolder + "combined_data_3.txt", movies, users, ratings, limit_entries, limit_size)
+parse_file(datasetFolder + "combined_data_4.txt", movies, users, ratings, limit_entries, limit_size)
 t1_input_parsed = get_and_print_time("Finished reading input files", t1_start)
 
 # Use the movies, users & ratings arrays to create two sparse matrices.
 movies_x_users, users_x_movies = create_sparse_matrices(movies, users, ratings)
 t1_input_parsed = get_and_print_time("Finished creating both sparse matrices", t1_input_parsed)
+print()
+
+# TASK 2 - DIMSUM
+# Parameters:
+gammas = [1] # run with one gamma
+#gammas = [0.01, 0.1, 1, 2, 5, 10, 50, 100, 500, 1000, 5000] # run with > 1 gamma
+
+# Execution: (in for loop to possibly run with different gammas)
+MSEs = [] # keep track of calculated MSEs of each gamma
+runtimes = [] # keep track of the runtime for each gamma
+for gamma in gammas:
+    ts_start = dt.datetime.now() # additional timestamp to calculate current loop execution time
+    t2_start = get_and_print_time("Task 2", None)
+
+    # Calculate the matrix's norms beforehand
+    nonzero_rows, nonzero_cols = users_x_movies.nonzero()
+    unq_nonzero_cols = np.unique(nonzero_cols)
+    unq_nonzero_rows = np.unique(nonzero_rows)
+    norms = calculate_vector_norm(users_x_movies, unq_nonzero_cols)
+    t2_norms = get_and_print_time("Finished calculating norms", t2_start)
+
+    # Run the DIMSUM mapper
+    # Here we run the mapper in a single thread on a single machine, this could be executed in a distributed computing setting as well.
+    # For example, by distributing the rows to different compute nodes.
+    map_result = dimsum_mapper(users_x_movies, norms, unq_nonzero_rows, gamma) # This delives a dictionary of all emitted pairs
+    t2_mapper = get_and_print_time("Finished mapper", t2_norms)
+
+    # Run the DIMSUM reducer
+    # Same as with the mapper, parts of the dictionary of all emitted pairs could be distributed to different compute nodes
+    b_matrix = dimsum_reducer(map_result, norms, max(movies) + 1)
+    t2_reducer = get_and_print_time("Finished reducer", t2_mapper)
+
+    # Compute approximation of A^T * A using b_matrix
+    approx_atranspose_a = approximate_atranspose_a(b_matrix, norms, max(movies) + 1)
+    t2_approximation = get_and_print_time("Finished approximation of A^T * A", t2_reducer)
+
+    # Calculate the exact A^T * A, with A = users_x_movies
+    actual_atraspose_a = movies_x_users @ users_x_movies
+    t2_actual = get_and_print_time("Finished calculating actual A^T * A", t2_approximation)
+
+    # Compare exact A^T * A with approximated one by calculating MSE
+    mse = (np.square(np.subtract(actual_atraspose_a, approx_atranspose_a))).mean()
+    t2_comparison = get_and_print_time("Finished calculating MSE of A^T & A", t2_actual)
+    print("MSE for gamma " + str(gamma) + " was: " + str(mse)) # if MSE is closer to 0 => better approximation
+
+    MSEs.append(mse)
+    loop_runtime = dt.datetime.now() - ts_start
+    runtimes.append(loop_runtime.total_seconds())
+
+
+if(len(gammas) > 1): # only plot charts if the program ran for more than one gamma
+    figure, (mseChart, runtimeChart) = plt.subplots(1, 2)
+    figure.suptitle('MSE VS. Runtime')
+    mseChart.plot(gammas, MSEs)
+    runtimeChart.plot(gammas, runtimes)
+    mseChart.set_ylabel('MSE')
+    mseChart.set_xlabel('gamma')
+    runtimeChart.set_ylabel('Runtime (in seconds)')
+    runtimeChart.set_xlabel('gamma')
+    plt.show()
+
+print()
+
+
 
 
 get_and_print_time("Finished all tasks", t1_start)
 
-#gamma = 100
-
-#print()
-#parse_file(folder + "smallest.txt", movies, users, ratings)
 
 
-
-# empirical
-#: download lots of files, analyse
-#statistical analysis, boxplots
-#+ well scoped
-# analysis tool: 
-#
-#
-#
-#
-#
-#
-#
-#parse_file(folder + "small.txt", movies, users, ratings)
-#
-
-
-# parse_file(folder + "medium.txt", movies, users, ratings)
-#parse_file(folder + "combined_data_1.txt", movies, users, ratings)
-#parse_file(folder + "combined_data_2.txt", movies, users, ratings)
-#parse_file(folder + "combined_data_3.txt", movies, users, ratings)
-#parse_file(folder + "combined_data_4.txt", movies, users, ratings)
-#t1_read = get_and_print_time("Finished reading file", t1_start)
-#movies_x_users, users_x_movies = create_sparse_matrices(movies, users, ratings)
-#t1_sparse = get_and_print_time("Finished creating sparse matrices", t1_read)
-#t1_finish = get_and_print_time("Finished task 1", t1_start)
-
-# print()
-# t2_start = get_and_print_time("Task 2", None)
-# actual_atraspose_a = calculate_atranspose_a(movies_x_users, users_x_movies)
 # nonzero_rows, nonzero_cols = users_x_movies.nonzero()
 # unq_nonzero_rows = np.unique(nonzero_rows)
 # unq_nonzero_cols = np.unique(nonzero_cols)
