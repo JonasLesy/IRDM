@@ -11,8 +11,7 @@ from readline import set_completer_delims
 import numpy as np
 import random as r
 import matplotlib.pyplot as plt
-from scipy.sparse import csr_matrix, lil_matrix, diags
-from scipy.sparse import linalg
+from scipy.sparse import csr_matrix, lil_matrix, diags, linalg
 
 ################
 #    TASK 1    #
@@ -143,72 +142,35 @@ def approximate_atranspose_a(b_matrix, norms, nr_of_movies):
 ################
 #    TASK 3    #
 ################
-
-def taak3(matrix):
-    def checkresults(org_matrix, new_matrix, unique_rows, file):
-        with open(file + '.txt', 'w') as testfile:
-            for r in unique_rows:
-                testfile.write(str(r) + ':\n')
-                row = org_matrix.getrow(r)
-                cols = row.indices
-                for c in cols:
-                    testfile.write(str(c) + ',' + str(round(new_matrix[r,c])) + '\n')
-
-    # Summarize dataset with SVD.
-    k = min(matrix.shape[0] - 1, 5)
-    print('k=' + str(k))
-    q_matrix, s, vt = linalg.svds(matrix, k = k)
-    
-    # From SVD we can calculate the matrices Q and P, which are needed for the SGD algorithm.
-    pt_matrix = diags(s) @ vt
-
-    nonzero_rows, nonzero_cols = matrix.nonzero()
+# Notes:
+#   - use the movies_x_rows matrix
+# Tasks:
+#   - summarize movies_x_rows with SVD
+#   - implement algorithm lecture 5 slide 92
+def calculate_nabla_q_and_p(q_matrix, pt_matrix):
+    nonzero_rows, nonzero_cols = q_matrix.nonzero()
     unique_rows = np.unique(nonzero_rows)
-    hyperparam_1, hyperparam_2 = 1, 1
-    gradient_step = 0.00001
-    epochs = 1
-
-    checkresults(matrix, q_matrix @ pt_matrix, unique_rows, "before")
-
-    for a in range(epochs):
-        # Stochastic zou random moeten zijn, wij loopen er helemaal door, zou dat ok zijn?
-        # TODO: shuffle de unique_rows
-        for m in unique_rows:
-            #print("Epoch " + str(a) + ": " + str(m))
-            row = matrix.getrow(m)
+    nabla_Q_matrix = lil_matrix((q_matrix.shape[0], q_matrix.shape[1]), dtype=float)
+    nabla_P_matrix = lil_matrix((pt_matrix.shape[0], pt_matrix.shape[1]), dtype=float)
+    for m in unique_rows: # improve Q and Ptranspose row by row, Q and P have the same dimensions, so this can be done in the same loop
+            row = q_matrix.getrow(m)
             cols = row.indices
             
             for u in cols:
-                #print("Epoch " + str(a) + "| movie: " + str(m) + " - user: " + str(u))
+                nabla_q, nabla_p = 0, 0  # calculate new nabla_q and nabla_p for Q[m, u] and P[u, m]
 
-                nabla_q, nabla_p = 0, 0
-
+                known_rating = users_x_movies[m, u]
                 for f in range(k):
-                    A = matrix[m,u]
-                    B = q_matrix[m,:] @ pt_matrix[:,u]
-                    C = pt_matrix[f,u]
-                    D = q_matrix[m,f]
+                    q_value = q_matrix[m,f]
+                    p_value = pt_matrix[f,u]
 
-                    nabla_q += (-2 * (A - B) * C) + (2 * hyperparam_1 * D)
-                    nabla_p += (-2 * (A - B) * D) + (2 * hyperparam_1 * C)
-                
-                correction_curr_col = gradient_step * nabla_p
-                pt_matrix[:,u] = pt_matrix[:,u] - correction_curr_col
+                    nabla_p += (-2 * (known_rating - (p_value * q_value)) * q_value) + (2 * hyperparam_1 * p_value)
+                    nabla_q += (-2 * (known_rating - (q_value * p_value)) * p_value) + (2 * hyperparam_2 * q_value)
 
-                correction_curr_row = gradient_step * nabla_q
-                q_matrix[m,:] = q_matrix[m,:] - correction_curr_row
+                nabla_P_matrix[u, m] = nabla_p
+                nabla_Q_matrix[m, u] = nabla_q
 
-    checkresults(matrix, q_matrix @ pt_matrix, unique_rows, "after")
-
-def plot():
-    # X axis parameter:
-    xaxis = np.array([2, 8])
-
-    # Y axis parameter:
-    yaxis = np.array([4, 9])
-
-    plt.plot(xaxis, yaxis)
-    plt.show()
+    return nabla_Q_matrix, nabla_P_matrix
 
 
 ########################
@@ -243,7 +205,7 @@ print("Current time - elapsed time since previous print")
 # TASK 1 - Loading the dataset:
 # Parameters:
 limit_entries = False # Set this boolean to True to only read the first 'limit_size' amount of entries of each given file, set to False to read full files
-limit_size = 10000
+limit_size = 10000000
 
 # Execution:
 # Parse the following input files:
@@ -261,7 +223,8 @@ print()
 
 # TASK 2 - DIMSUM
 # Parameters:
-gammas = [1] # run with one gamma
+gammas = []
+#gammas = [1] # run with one gamma
 #gammas = [0.01, 0.1, 1, 2, 5, 10, 50, 100, 500, 1000, 5000] # run with > 1 gamma
 
 # Execution: (in for loop to possibly run with different gammas)
@@ -320,31 +283,56 @@ if(len(gammas) > 1): # only plot charts if the program ran for more than one gam
 
 print()
 
+# TASK 3 - (Stochastic) Gradient Descent with Latent Factors
+# Parameters:
+epochs = 5 # Control the number of epochs to execute
+matrix_shape = movies_x_users.shape
+#k = max(1, (min(matrix_shape[0], matrix_shape[1]) - 1)) # Control the number of eigenvalues to be used in SVD, rule: 1 <= k <= kmax, with kmax is the smallest dimension of the matrix minus one
+k = 4
+stochastic_gradient_step = 0.00001 # learning rate for stochastic gradient descent
+batch_gradient_step = 0.1 # learning rate for batch gradient descent
+hyperparam_1, hyperparam_2 = 1, 1 # user set regularization parameters to accommodate for scarcity, can be used to shrink aggressively where data are scarce
+
+# Execution:
+t3_start = get_and_print_time("Task 3", None)
+
+# Summarize dataset with SVD.
+#k = min(movies_x_users.shape[0] - 1, 5)
+q_matrix, s, vtranspose= linalg.svds(movies_x_users, k = k)
+q_matrix = csr_matrix(q_matrix) # make q_matrix sparse
+
+# From SVD we can calculate the matrices Q and P, which are needed for the SGD algorithm.
+ptranspose_matrix = diags(s) @ vtranspose # sigma is a diagonal matrix, so we only have to multiply those with vtranspose
+ptranspose_matrix = csr_matrix(ptranspose_matrix) # make q_matrix sparse
+
+q_matrix_for_BGD = q_matrix.copy()
+ptranspose_matrix_for_BGD = ptranspose_matrix.copy()
+
+get_and_print_time("Finished Q and P calculation", t3_start)
+
+# Now iteratively improve q & p to accomodate for missing values in movies_x_users (=A)
+for i in range(epochs):
+    t_epoch_start = get_and_print_time(None, None)
+    # run a full epoch of SGD:
+    nabla_Q_matrix, nabla_P_matrix = calculate_nabla_q_and_p(q_matrix, ptranspose_matrix)
+
+    # improve Q and P with the calculated nablas
+    q_matrix = np.subtract(q_matrix, (stochastic_gradient_step * nabla_Q_matrix))
+    ptranspose_matrix = np.subtract(ptranspose_matrix, (stochastic_gradient_step * nabla_P_matrix))
+    t_sgd_end = get_and_print_time("Finished epoch " + str(i+1) + " of stochastic gradient descent", t_epoch_start)
+
+    #run a full epoch of BGD
+    nabla_Q_matrix, nabla_P_matrix = calculate_nabla_q_and_p(q_matrix_for_BGD, ptranspose_matrix_for_BGD)
+    q_nonzero = q_matrix_for_BGD.nonzero()
+    q_matrix_for_BGD[q_nonzero] -= (stochastic_gradient_step * np.sum(nabla_Q_matrix))
+    ptranspose_nonzero = ptranspose_matrix_for_BGD.nonzero()
+    ptranspose_matrix_for_BGD[ptranspose_nonzero] -= (batch_gradient_step * np.sum(nabla_P_matrix))
+    t_bgd_end = get_and_print_time("Finished epoch " + str(i+1) + " of batch gradient descent", t_sgd_end)
+
 
 
 
 get_and_print_time("Finished all tasks", t1_start)
 
-
-
-# nonzero_rows, nonzero_cols = users_x_movies.nonzero()
-# unq_nonzero_rows = np.unique(nonzero_rows)
-# unq_nonzero_cols = np.unique(nonzero_cols)
-# norms = calculate_vector_norm(users_x_movies, unq_nonzero_cols)
-# t2_norms = get_and_print_time("Finished creating norms", t2_start)
-# map_result = dimsum_mapper(users_x_movies, norms, unq_nonzero_rows, gamma)
-# t2_mapper = get_and_print_time("Finished mapper", t2_norms)
-# b_matrix = dimsum_reducer(map_result, norms, len(movies) + 1)
-# t2_reducer = get_and_print_time("Finished reducer", t2_mapper)
-# approx_atraspose_a = approximate_atranspose_a(b_matrix, norms, len(movies) + 1)
-# t2_approximation = get_and_print_time("Finished approximation", t2_reducer)
-# compare_atranspose_a(actual_atraspose_a, approx_atraspose_a)
-# t2_compare = get_and_print_time("Finished comparison", t2_approximation)
-# t2_finish = get_and_print_time("Finished task 2", t2_start)
-
-#print()
-#t3_start = get_and_print_time("Task 3", None)
-#taak3(movies_x_users)
-#t3_finish = get_and_print_time("Finished task 3", t3_start)
 
 
