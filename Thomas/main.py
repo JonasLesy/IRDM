@@ -165,6 +165,19 @@ def calculate_nabla_q_and_p(q_matrix, pt_matrix):
 
     return nabla_Q_matrix, nabla_P_matrix
 
+def calculate_accuracy(original_matrix, q_matrix, pt_matrix):
+    nonzero_rows, nonzero_cols = original_matrix.nonzero()
+    unique_rows = np.unique(nonzero_rows)
+    total_sum = 0
+    m_matrix = q_matrix @ pt_matrix
+    for x in unique_rows:
+        row = original_matrix.getrow(x)
+        cols = row.indices
+        for i in cols:
+            total_sum += (original_matrix[x, i] - m_matrix[x, i]) ** 2
+    
+    return np.sqrt(total_sum) / original_matrix.nnz
+
 
 ########################
 #    HELPER METHODS    #
@@ -197,8 +210,8 @@ print("Current time - elapsed time since previous print")
 
 # TASK 1 - Loading the dataset:
 # Parameters:
-limit_entries = False # Set this boolean to True to only read the first 'limit_size' amount of entries of each given file, set to False to read full files
-limit_size = 10000000
+limit_entries = True # Set this boolean to True to only read the first 'limit_size' amount of entries of each given file, set to False to read full files
+limit_size = 1000
 
 # Execution:
 # Parse the following input files:
@@ -281,7 +294,7 @@ print()
 epochs = 5 # Control the number of epochs to execute
 matrix_shape = movies_x_users.shape
 #k = max(1, (min(matrix_shape[0], matrix_shape[1]) - 1)) # Control the number of eigenvalues to be used in SVD, rule: 1 <= k <= kmax, with kmax is the smallest dimension of the matrix minus one
-k = 4
+k = 2
 stochastic_gradient_step = 0.00001 # learning rate for stochastic gradient descent
 batch_gradient_step = 0.1 # learning rate for batch gradient descent
 hyperparam_1, hyperparam_2 = 1, 1 # user set regularization parameters to accommodate for scarcity, can be used to shrink aggressively where data are scarce
@@ -303,8 +316,13 @@ ptranspose_matrix_for_BGD = ptranspose_matrix.copy()
 
 get_and_print_time("Finished Q and P calculation", t3_start)
 
+RMSEs_SGD = [] # keep track of calculated RMSEs of each gamma for SGD
+RMSEs_BGD = [] # keep track of calculated RMSEs of each gamma for BGD
+epochs_list = []
+
 # Now iteratively improve q & p to accomodate for missing values in movies_x_users (=A)
 for i in range(epochs):
+    epochs_list.append(i + 1)
     t_epoch_start = get_and_print_time(None, None)
     # run a full epoch of SGD:
     nabla_Q_matrix, nabla_P_matrix = calculate_nabla_q_and_p(q_matrix, ptranspose_matrix)
@@ -314,15 +332,34 @@ for i in range(epochs):
     ptranspose_matrix = np.subtract(ptranspose_matrix, (stochastic_gradient_step * nabla_P_matrix))
     t_sgd_end = get_and_print_time("Finished epoch " + str(i+1) + " of stochastic gradient descent", t_epoch_start)
 
+    # calculate RMSE of SGD
+    rmse_sgd = calculate_accuracy(movies_x_users, q_matrix, ptranspose_matrix)
+    RMSEs_SGD.append(rmse_sgd)
+    t_rmse_sgd = get_and_print_time("Calculated RMSE for SGD: " + str(rmse_sgd), t_sgd_end)
+
     #run a full epoch of BGD
     nabla_Q_matrix, nabla_P_matrix = calculate_nabla_q_and_p(q_matrix_for_BGD, ptranspose_matrix_for_BGD)
     q_nonzero = q_matrix_for_BGD.nonzero()
     q_matrix_for_BGD[q_nonzero] -= (stochastic_gradient_step * np.sum(nabla_Q_matrix))
     ptranspose_nonzero = ptranspose_matrix_for_BGD.nonzero()
     ptranspose_matrix_for_BGD[ptranspose_nonzero] -= (batch_gradient_step * np.sum(nabla_P_matrix))
-    t_bgd_end = get_and_print_time("Finished epoch " + str(i+1) + " of batch gradient descent", t_sgd_end)
+    t_bgd_end = get_and_print_time("Finished epoch " + str(i+1) + " of batch gradient descent", t_rmse_sgd)
 
+    # calculate RMSE of BGD
+    rmse_bgd = calculate_accuracy(movies_x_users, q_matrix_for_BGD, ptranspose_matrix_for_BGD)
+    RMSEs_BGD.append(rmse_bgd)
+    t_rmse_bgd = get_and_print_time("Calculated RMSE for BGD: " + str(rmse_bgd), t_bgd_end)
 
+if(len(epochs_list) > 1):
+    figure, (sgdChart, bgdChart) = plt.subplots(1, 2)
+    figure.suptitle('SGD VS. BGD - RMSE')
+    sgdChart.plot(epochs_list, RMSEs_SGD)
+    bgdChart.plot(epochs_list, RMSEs_BGD)
+    sgdChart.set_ylabel('RMSE - SGD')
+    sgdChart.set_xlabel('gamma')
+    bgdChart.set_ylabel('RMSE - BGD')
+    bgdChart.set_xlabel('gamma')
+    plt.show()
 
 
 get_and_print_time("Finished all tasks", t1_start)
