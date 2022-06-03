@@ -137,21 +137,14 @@ def approximate_atranspose_a(b_matrix, norms, nr_of_movies):
 
 
 
-
-
 ################
 #    TASK 3    #
 ################
-# Notes:
-#   - use the movies_x_rows matrix
-# Tasks:
-#   - summarize movies_x_rows with SVD
-#   - implement algorithm lecture 5 slide 92
 def calculate_nabla_q_and_p(q_matrix, pt_matrix):
     nonzero_rows, nonzero_cols = q_matrix.nonzero()
     unique_rows = np.unique(nonzero_rows)
-    nabla_Q_matrix = lil_matrix((q_matrix.shape[0], q_matrix.shape[1]), dtype=float)
-    nabla_P_matrix = lil_matrix((pt_matrix.shape[0], pt_matrix.shape[1]), dtype=float)
+    nabla_Q_matrix = lil_matrix((q_matrix.shape[0], q_matrix.shape[1]), dtype=float) # generate a new matrix to store the nabla q's in
+    nabla_P_matrix = lil_matrix((pt_matrix.shape[0], pt_matrix.shape[1]), dtype=float) # generate a new matrix to store the nabla p's in
     for m in unique_rows: # improve Q and Ptranspose row by row, Q and P have the same dimensions, so this can be done in the same loop
             row = q_matrix.getrow(m)
             cols = row.indices
@@ -159,10 +152,10 @@ def calculate_nabla_q_and_p(q_matrix, pt_matrix):
             for u in cols:
                 nabla_q, nabla_p = 0, 0  # calculate new nabla_q and nabla_p for Q[m, u] and P[u, m]
 
-                known_rating = users_x_movies[m, u]
+                known_rating = users_x_movies[m, u] # Rix in formula
                 for f in range(k):
-                    q_value = q_matrix[m,f]
-                    p_value = pt_matrix[f,u]
+                    q_value = q_matrix[m,f] # Qif in formula
+                    p_value = pt_matrix[f,u] # Pxf in formula
 
                     nabla_p += (-2 * (known_rating - (p_value * q_value)) * q_value) + (2 * hyperparam_1 * p_value)
                     nabla_q += (-2 * (known_rating - (q_value * p_value)) * p_value) + (2 * hyperparam_2 * q_value)
@@ -305,7 +298,7 @@ q_matrix = csr_matrix(q_matrix) # make q_matrix sparse
 ptranspose_matrix = diags(s) @ vtranspose # sigma is a diagonal matrix, so we only have to multiply those with vtranspose
 ptranspose_matrix = csr_matrix(ptranspose_matrix) # make q_matrix sparse
 
-q_matrix_for_BGD = q_matrix.copy()
+q_matrix_for_BGD = q_matrix.copy() # take a copy of both Q and P so we can run the SGD and BGD loops simultaneously
 ptranspose_matrix_for_BGD = ptranspose_matrix.copy()
 
 get_and_print_time("Finished Q and P calculation", t3_start)
