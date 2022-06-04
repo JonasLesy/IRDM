@@ -5,6 +5,7 @@
 from cProfile import run
 from importlib.metadata import files
 import io
+import os
 import collections, functools, operator
 import datetime as dt
 from readline import set_completer_delims
@@ -194,7 +195,7 @@ def get_and_print_time(msg, prev):
         timedelta = now - prev # add the difference between now and previous to the message, if previous was given
         hours, remainder = divmod(timedelta.seconds, 3600)
         minutes, seconds = divmod(remainder, 60)
-        text += ": took " + str(hours) + "hours, " + str(minutes) + "minutes and " + str(seconds) + "seconds."
+        text += ": took " + str(hours) + " hours, " + str(minutes) + " minutes and " + str(seconds) + " seconds."
 
     print(text)
     return now
@@ -205,7 +206,7 @@ def get_and_print_time(msg, prev):
 #####################
 # Prepare the program for running task1, task2 & task3
 movies, users, ratings = [], [], []
-datasetFolder = "./netflix dataset/"
+datasetFolder = os.path.dirname(__file__) + "/netflix dataset/"
 print("Current time - elapsed time since previous print")
 
 # TASK 1 - Loading the dataset:
@@ -263,18 +264,17 @@ for gamma in gammas:
     t2_approximation = get_and_print_time("Finished approximation of A^T * A", t2_reducer)
 
     # Calculate the exact A^T * A, with A = users_x_movies
-    actual_atraspose_a = movies_x_users @ users_x_movies
+    actual_atranspose_a = movies_x_users @ users_x_movies
     t2_actual = get_and_print_time("Finished calculating actual A^T * A", t2_approximation)
 
     # Compare exact A^T * A with approximated one by calculating MSE
-    mse = (np.square(np.subtract(actual_atraspose_a, approx_atranspose_a))).mean()
+    mse = (np.square(np.subtract(actual_atranspose_a, approx_atranspose_a))).mean()
     t2_comparison = get_and_print_time("Finished calculating MSE of A^T & A", t2_actual)
     print("MSE for gamma " + str(gamma) + " was: " + str(mse)) # if MSE is closer to 0 => better approximation
 
     MSEs.append(mse)
     loop_runtime = dt.datetime.now() - ts_start
     runtimes.append(loop_runtime.total_seconds())
-
 
 if(len(gammas) > 1): # only plot charts if the program ran for more than one gamma
     figure, (mseChart, runtimeChart) = plt.subplots(1, 2)
@@ -303,8 +303,7 @@ hyperparam_1, hyperparam_2 = 1, 1 # user set regularization parameters to accomm
 t3_start = get_and_print_time("Task 3", None)
 
 # Summarize dataset with SVD.
-#k = min(movies_x_users.shape[0] - 1, 5)
-q_matrix, s, vtranspose= linalg.svds(movies_x_users, k = k)
+q_matrix, s, vtranspose = linalg.svds(movies_x_users, k = k)
 q_matrix = csr_matrix(q_matrix) # make q_matrix sparse
 
 # From SVD we can calculate the matrices Q and P, which are needed for the SGD algorithm.
@@ -340,7 +339,7 @@ for i in range(epochs):
     #run a full epoch of BGD
     nabla_Q_matrix, nabla_P_matrix = calculate_nabla_q_and_p(q_matrix_for_BGD, ptranspose_matrix_for_BGD)
     q_nonzero = q_matrix_for_BGD.nonzero()
-    q_matrix_for_BGD[q_nonzero] -= (stochastic_gradient_step * np.sum(nabla_Q_matrix))
+    q_matrix_for_BGD[q_nonzero] -= (batch_gradient_step * np.sum(nabla_Q_matrix))
     ptranspose_nonzero = ptranspose_matrix_for_BGD.nonzero()
     ptranspose_matrix_for_BGD[ptranspose_nonzero] -= (batch_gradient_step * np.sum(nabla_P_matrix))
     t_bgd_end = get_and_print_time("Finished epoch " + str(i+1) + " of batch gradient descent", t_rmse_sgd)
