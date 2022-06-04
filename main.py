@@ -146,10 +146,12 @@ def approximate_atranspose_a(b_matrix, norms, nr_of_movies):
 def calculate_nabla_q_and_p(ratings, q_matrix, pt_matrix, update_nabla, hyperparam_1, hyperparam_2):
     nonzero_rows, nonzero_cols = ratings.nonzero()
     unique_rows = np.unique(nonzero_rows)
+    np.random.shuffle(unique_rows)
 
     for i in unique_rows: # improve Q and Ptranspose row by row, Q and P have the same dimensions, so this can be done in the same loop
         row = ratings.getrow(i)
         cols = row.indices
+        np.random.shuffle(cols)
 
         for x in cols:
             known_rating = ratings[i, x] # Rix in formula
@@ -171,15 +173,13 @@ def batch_gradient_descent(ratings, q_matrix, pt_matrix, gradient_step, hyperpar
     nabla_P_matrix = lil_matrix((pt_matrix.shape[0], pt_matrix.shape[1]), dtype=float)  # generate a new matrix to store the nabla p's in
     
     def update_nabla(i, x, f, nabla_q, nabla_p):
-        nabla_Q_matrix[i, f] += nabla_q
-        nabla_P_matrix[f, x] += nabla_p
+        nabla_Q_matrix[i, f] += (gradient_step * nabla_q)
+        nabla_P_matrix[f, x] += (gradient_step * nabla_p)
 
     calculate_nabla_q_and_p(ratings, q_matrix, pt_matrix, update_nabla, hyperparam_1, hyperparam_2)
 
-    q_nonzero = q_matrix.nonzero()
-    q_matrix_for_BGD[q_nonzero] -= (gradient_step * np.sum(nabla_Q_matrix))
-    ptranspose_nonzero = ptranspose_matrix_for_BGD.nonzero()
-    ptranspose_matrix_for_BGD[ptranspose_nonzero] -= (gradient_step * np.sum(nabla_P_matrix))
+    q_matrix = np.subtract(q_matrix, nabla_Q_matrix)
+    pt_matrix = np.subtract(pt_matrix, nabla_P_matrix)
 
 
 # TODO: commentaar
@@ -360,7 +360,7 @@ for i in range(epochs):
 
     #run a full epoch of BGD
     batch_gradient_descent(movies_x_users, q_matrix_for_BGD, ptranspose_matrix_for_BGD, batch_gradient_step, hyperparam_1, hyperparam_2)
-    t_bgd_end = get_and_print_time("Finished epoch " + str(i+1) + " of batch gradient descent", t_epoch_start)
+    t_bgd_end = get_and_print_time("Finished epoch " + str(i+1) + " of batch gradient descent", t_rmse_sgd)
 
     # calculate RMSE of BGD
     rmse_bgd = calculate_accuracy(movies_x_users, q_matrix_for_BGD, ptranspose_matrix_for_BGD)
