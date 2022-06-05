@@ -51,14 +51,14 @@ def parse_file(file, movies, users, ratings, limit_entries, limit_size, testing_
                 userID = int(split_line[0])
                 rating = int(split_line[1])
                 if (last_movie, userID) in testing_dict:
-                    movies_testing.append(last_movie)
+                    movies_testing.append(last_movie) # put testing sample in global testing array, didn't add this to function parameters for clarity
                     users_testing.append(userID)
                     ratings_testing.append(rating)
                 else:
                     movies.append(last_movie)
                     users.append(userID)
                     ratings.append(rating)
-                    counter += 1                
+                    counter += 1
 
 
 # Create two sparse matrices from the three lists (because the actual matrix would be too large for memory!).
@@ -277,6 +277,7 @@ t1_input_matrices_made = get_and_print_time("Finished creating both sparse matri
 
 if split_training:
     # Here we don't use the create_sparse_matrices function used above, as we only need movies_x_users for our task 3 and 4 implementation
+    # if task2 required testing and training split, we should also use the create_sparse_matrices function (not part of the assignment)
     movies_array = np.asarray(movies_testing)
     users_array = np.asarray(users_testing)
     ratings_array = np.asarray(ratings_testing)
@@ -400,7 +401,7 @@ for i in range(epochs):
     t_bgd_end = get_and_print_time("Finished epoch " + str(i+1) + " of batch gradient descent", t_rmse_sgd)
 
     # calculate RMSE of BGD
-    rmse_bgd = 0 #calculate_accuracy(movies_x_users, q_matrix_for_BGD, ptranspose_matrix_for_BGD)
+    rmse_bgd = calculate_accuracy(matrix_to_use_for_accurracy, q_matrix_for_BGD, ptranspose_matrix_for_BGD)
     RMSEs_BGD.append(rmse_bgd)
     t_rmse_bgd = get_and_print_time("Calculated RMSE for BGD: " + str(rmse_bgd), t_bgd_end)
 
