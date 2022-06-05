@@ -109,7 +109,7 @@ def create_sparse_matrices(movies: list, users: list, ratings: list):
     movies_x_users = csr_matrix((ratings_array, (movies_array, users_array)), dtype=float)
 
     # Create a sparse matrix with the rows representing the users and the columns representing the movies
-    users_x_movies = movies_x_users.transpose()
+    users_x_movies = movies_x_users.transpose() # This method is faster than creating a second sparse matrix from scratch.
 
     return movies_x_users, users_x_movies
 
