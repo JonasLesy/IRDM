@@ -184,8 +184,7 @@ def batch_gradient_descent(ratings, q_matrix, pt_matrix, gradient_step, hyperpar
 
     calculate_nabla_q_and_p(ratings, q_matrix, pt_matrix, update_nabla, hyperparam_1, hyperparam_2)
 
-    q_matrix = np.subtract(q_matrix, nabla_Q_matrix)
-    pt_matrix = np.subtract(pt_matrix, nabla_P_matrix)
+    return np.subtract(q_matrix, nabla_Q_matrix), np.subtract(pt_matrix, nabla_P_matrix)
 
 
 # TODO: commentaar
@@ -206,7 +205,7 @@ def calculate_accuracy(original_matrix, q_matrix, pt_matrix):
         row = original_matrix.getrow(x)
         cols = row.indices
         for i in cols:
-            total_sum += (original_matrix[x, i] - m_matrix[x, i]) ** 2
+            total_sum += (m_matrix[x, i] - original_matrix[x, i]) ** 2
 
     return np.sqrt(total_sum) / original_matrix.nnz
 
@@ -397,7 +396,7 @@ for i in range(epochs):
     t_rmse_sgd = get_and_print_time("Calculated RMSE for SGD: " + str(rmse_sgd), t_sgd_end)
 
     #run a full epoch of BGD
-    #batch_gradient_descent(movies_x_users, q_matrix_for_BGD, ptranspose_matrix_for_BGD, batch_gradient_step, hyperparam_1, hyperparam_2)
+    q_matrix_for_BGD, ptranspose_matrix_for_BGD = batch_gradient_descent(movies_x_users, q_matrix_for_BGD, ptranspose_matrix_for_BGD, batch_gradient_step, hyperparam_1, hyperparam_2)
     t_bgd_end = get_and_print_time("Finished epoch " + str(i+1) + " of batch gradient descent", t_rmse_sgd)
 
     # calculate RMSE of BGD
