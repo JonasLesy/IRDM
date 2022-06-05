@@ -201,11 +201,16 @@ def calculate_accuracy(original_matrix, q_matrix, pt_matrix):
     unique_rows = np.unique(nonzero_rows)
     total_sum = 0
     m_matrix = q_matrix @ pt_matrix
+    m_rows, m_cols = m_matrix.shape[0], m_matrix.shape[1]
     for x in unique_rows:
-        row = original_matrix.getrow(x)
-        cols = row.indices
-        for i in cols:
-            total_sum += (m_matrix[x, i] - original_matrix[x, i]) ** 2
+        # accomodate for the testing dataset containing higher dimensions, not used in training, this can happen because we can limit the training sampling to X lines per file
+        # This will never happen if limit_entries = False
+        if x <= m_rows: 
+            row = original_matrix.getrow(x)
+            cols = row.indices
+            for i in cols:
+                if i <= m_cols:
+                    total_sum += (m_matrix[x, i] - original_matrix[x, i]) ** 2
 
     return np.sqrt(total_sum) / original_matrix.nnz
 
@@ -253,7 +258,7 @@ print("Current time - elapsed time since previous print")
 # TASK 1 - Loading the dataset:
 # Parameters:
 limit_entries = True # Set this boolean to True to only read the first 'limit_size' amount of entries of each given file, set to False to read full files
-limit_size = 10000
+limit_size = 1000
 split_training = True
 
 # Execution:
@@ -349,10 +354,10 @@ print()
 
 # TASK 3 - (Stochastic) Gradient Descent with Latent Factors
 # Parameters:
-epochs = 10 # Control the number of epochs to execute
+epochs = 20 # Control the number of epochs to execute
 matrix_shape = movies_x_users.shape
 #k = max(1, (min(matrix_shape[0], matrix_shape[1]) - 1)) # Control the number of eigenvalues to be used in SVD, rule: 1 <= k <= kmax, with kmax is the smallest dimension of the matrix minus one
-k = 3
+k = 6
 stochastic_gradient_step = 0.00001 # learning rate for stochastic gradient descent
 batch_gradient_step = 0.1 # learning rate for batch gradient descent
 hyperparam_1, hyperparam_2 = 1, 1 # user set regularization parameters to accommodate for scarcity, can be used to shrink aggressively where data are scarce
