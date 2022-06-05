@@ -36,7 +36,7 @@ from scipy.sparse import csr_matrix, lil_matrix, diags, linalg
 # ratings =    ... | 4 | ...
 #            ----------------
 #                    ^ all have the same index in their respective array
-def parse_file(file, movies, users, ratings, limit_entries, limit_size):
+def parse_file(file, movies, users, ratings, limit_entries, limit_size, testing_dict):
     with io.open(file, "r") as f:
         last_movie = 0
         counter = 0
@@ -48,17 +48,23 @@ def parse_file(file, movies, users, ratings, limit_entries, limit_size):
                 last_movie = int(line.split(":")[0]) 
             else: # the line is a rating
                 split_line = line.split(",")
-                movies.append(last_movie)
-                users.append(int(split_line[0]))
-                ratings.append(int(split_line[1]))
-                counter += 1
+                userID = int(split_line[0])
+                rating = int(split_line[1])
+                if (last_movie, userID) in testing_dict:
+                    movies_testing.append(last_movie)
+                    users_testing.append(userID)
+                    ratings_testing.append(rating)
+                else:
+                    movies.append(last_movie)
+                    users.append(userID)
+                    ratings.append(rating)
+                    counter += 1                
 
 
 # Create two sparse matrices from the three lists (because the actual matrix would be too large for memory!).
 # One that has movies as rows and users as columns, with the contents of the cells being the ratings given by the user for the movies, 
 # And one that has users as columns and the movies as rows.
 def create_sparse_matrices(movies, users, ratings):
-    # TODO: better performance using np-arrays, why?
     movies_array = np.asarray(movies)
     users_array = np.asarray(users)
     ratings_array = np.asarray(ratings)
@@ -225,6 +231,17 @@ def get_and_print_time(msg, prev):
     print(text)
     return now
 
+def parse_probe_file(file, testing_dict):
+    with io.open(file, "r") as f:
+        last_movie = 0
+
+        for line in f:
+            if ":" in line: # the line is a movieID line
+                last_movie = int(line.split(":")[0]) 
+            else: # the line is a userID
+                userID = int(line.split("\n")[0])
+                testing_dict[(last_movie, userID)] = True
+
 
 #####################
 #    RUN SECTION    #
@@ -237,20 +254,36 @@ print("Current time - elapsed time since previous print")
 # TASK 1 - Loading the dataset:
 # Parameters:
 limit_entries = True # Set this boolean to True to only read the first 'limit_size' amount of entries of each given file, set to False to read full files
-limit_size = 1000
+limit_size = 10000
+split_training = True
 
 # Execution:
 # Parse the following input files:
 t1_start = get_and_print_time("Task 1", None) # retrieve (& print) current timestamp to measure task1 efficiency
-parse_file(datasetFolder + "combined_data_1.txt", movies, users, ratings, limit_entries, limit_size)
-parse_file(datasetFolder + "combined_data_2.txt", movies, users, ratings, limit_entries, limit_size)
-parse_file(datasetFolder + "combined_data_3.txt", movies, users, ratings, limit_entries, limit_size)
-parse_file(datasetFolder + "combined_data_4.txt", movies, users, ratings, limit_entries, limit_size)
+testing_dict = {}
+movies_testing, users_testing, ratings_testing = [], [], []
+if split_training: # If you choose to split training and testing data, a probe.txt will be read to define the testing dataset
+    parse_probe_file(datasetFolder + "probe.txt", testing_dict)
+    t1_start = get_and_print_time("Finished reading probe file", t1_start)
+parse_file(datasetFolder + "combined_data_1.txt", movies, users, ratings, limit_entries, limit_size, testing_dict)
+parse_file(datasetFolder + "combined_data_2.txt", movies, users, ratings, limit_entries, limit_size, testing_dict)
+parse_file(datasetFolder + "combined_data_3.txt", movies, users, ratings, limit_entries, limit_size, testing_dict)
+parse_file(datasetFolder + "combined_data_4.txt", movies, users, ratings, limit_entries, limit_size, testing_dict)
 t1_input_parsed = get_and_print_time("Finished reading input files", t1_start)
 
 # Use the movies, users & ratings arrays to create two sparse matrices.
 movies_x_users, users_x_movies = create_sparse_matrices(movies, users, ratings)
-t1_input_parsed = get_and_print_time("Finished creating both sparse matrices", t1_input_parsed)
+t1_input_matrices_made = get_and_print_time("Finished creating both sparse matrices", t1_input_parsed)
+
+if split_training:
+    # Here we don't use the create_sparse_matrices function used above, as we only need movies_x_users for our task 3 and 4 implementation
+    movies_array = np.asarray(movies_testing)
+    users_array = np.asarray(users_testing)
+    ratings_array = np.asarray(ratings_testing)
+    # Create a sparse matrix with the rows representing the movies and the columns representing the users
+    movies_x_users_testing = csr_matrix((ratings_array, (movies_array, users_array)), dtype=float)
+    t1_input_matrices_made = get_and_print_time("Finished creating sparse matrix for testing", t1_input_matrices_made)
+
 print()
 
 # TASK 2 - DIMSUM
@@ -316,10 +349,10 @@ print()
 
 # TASK 3 - (Stochastic) Gradient Descent with Latent Factors
 # Parameters:
-epochs = 5 # Control the number of epochs to execute
+epochs = 10 # Control the number of epochs to execute
 matrix_shape = movies_x_users.shape
 #k = max(1, (min(matrix_shape[0], matrix_shape[1]) - 1)) # Control the number of eigenvalues to be used in SVD, rule: 1 <= k <= kmax, with kmax is the smallest dimension of the matrix minus one
-k = 2
+k = 3
 stochastic_gradient_step = 0.00001 # learning rate for stochastic gradient descent
 batch_gradient_step = 0.1 # learning rate for batch gradient descent
 hyperparam_1, hyperparam_2 = 1, 1 # user set regularization parameters to accommodate for scarcity, can be used to shrink aggressively where data are scarce
@@ -354,16 +387,20 @@ for i in range(epochs):
     t_sgd_end = get_and_print_time("Finished epoch " + str(i+1) + " of stochastic gradient descent", t_epoch_start)
 
     # calculate RMSE of SGD
-    rmse_sgd = calculate_accuracy(movies_x_users, q_matrix, ptranspose_matrix)
+    matrix_to_use_for_accurracy = movies_x_users
+    if split_training:
+        matrix_to_use_for_accurracy = movies_x_users_testing
+    
+    rmse_sgd = calculate_accuracy(matrix_to_use_for_accurracy, q_matrix, ptranspose_matrix)
     RMSEs_SGD.append(rmse_sgd)
     t_rmse_sgd = get_and_print_time("Calculated RMSE for SGD: " + str(rmse_sgd), t_sgd_end)
 
     #run a full epoch of BGD
-    batch_gradient_descent(movies_x_users, q_matrix_for_BGD, ptranspose_matrix_for_BGD, batch_gradient_step, hyperparam_1, hyperparam_2)
+    #batch_gradient_descent(movies_x_users, q_matrix_for_BGD, ptranspose_matrix_for_BGD, batch_gradient_step, hyperparam_1, hyperparam_2)
     t_bgd_end = get_and_print_time("Finished epoch " + str(i+1) + " of batch gradient descent", t_rmse_sgd)
 
     # calculate RMSE of BGD
-    rmse_bgd = calculate_accuracy(movies_x_users, q_matrix_for_BGD, ptranspose_matrix_for_BGD)
+    rmse_bgd = 0 #calculate_accuracy(movies_x_users, q_matrix_for_BGD, ptranspose_matrix_for_BGD)
     RMSEs_BGD.append(rmse_bgd)
     t_rmse_bgd = get_and_print_time("Calculated RMSE for BGD: " + str(rmse_bgd), t_bgd_end)
 
@@ -373,9 +410,9 @@ if(len(epochs_list) > 1):
     sgdChart.plot(epochs_list, RMSEs_SGD)
     bgdChart.plot(epochs_list, RMSEs_BGD)
     sgdChart.set_ylabel('RMSE - SGD')
-    sgdChart.set_xlabel('gamma')
+    sgdChart.set_xlabel('epoch')
     bgdChart.set_ylabel('RMSE - BGD')
-    bgdChart.set_xlabel('gamma')
+    bgdChart.set_xlabel('epoch')
     plt.show()
 
 
