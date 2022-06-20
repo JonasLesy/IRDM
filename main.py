@@ -230,50 +230,50 @@ def approximate_atranspose_a(b_matrix: lil_matrix, norms: np.ndarray, nr_of_movi
 ################
 #    TASK 3    #
 ################
+def calculate_nabla_p(ratings: csr_matrix, q_matrix: csr_matrix, pt_matrix: csr_matrix, hyperparam_1: int, nabla_P_matrix: lil_matrix):
+    # Loop over all entries in Q matrix:
+    nonzero_rows, nonzero_cols = pt_matrix.nonzero()
+    nonzero_cols = np.unique(nonzero_cols)
 
-def calculate_nabla_q_and_p(ratings: csr_matrix, q_matrix: csr_matrix, pt_matrix: csr_matrix, update_nabla, hyperparam_1: int, hyperparam_2: int):
-    """ Calculates the nabla q and nabla p for every rating in the matrix. For each rating (and for each factor) the update_nabla function is called.
+    for i in nonzero_cols: # improve Q and Ptranspose row by row, Q and P have the same dimensions, so this can be done in the same loop
+        col = pt_matrix.getcol(i)
+        rows = col.indices
 
-        Parameters:
-        ------------
-            ratings: csr_matrix
-                Target matrix which holds all the ratings.
-            q_matrix: csr_matrix
-                Target matrix for which the nabla q needs to be calculated.
-            pt_matrix: csr_matrix
-                Target matrix for which the nabla p needs to be calculated.
-            update_nabla: lambda (i: int, x: int, f: int, nabla_q: float, nabla_p: float)
-                Anonymous function that will be called for every ratings (and for every factor). The movie, user, factor, nabla q and nabla p will be passed as arguments.
-            hyperparam_1: int
-                Regularization parameter for p.
-            hyperparam_2: int
-                Regularization parameter for q.
+        for f in rows:
 
-        Return:
-        ------------
-            None
-    """
-    nonzero_rows, nonzero_cols = ratings.nonzero()
+            original_col = ratings.getcol(i)
+            original_rows = original_col.indices
+            total_P_sum = 0.0
+            p_value = pt_matrix[f, i] # Qif in formula
+            for x in original_rows: # Loop over all nonzero column entries in original matrix
+                q_value = q_matrix[x, f]
+                total_P_sum += -2 * (ratings[x, i] - p_value * q_value) * q_value + 2 * hyperparam_1 * p_value
+            #total_P_sum += 2 * hyperparam_1 * p_value
+            nabla_P_matrix[f, i] = total_P_sum
+
+def calculate_nabla_q(ratings: csr_matrix, q_matrix: csr_matrix, pt_matrix: csr_matrix, hyperparam_1: int, nabla_Q_matrix: lil_matrix):
+
+    # Loop over all entries in Q matrix:
+    nonzero_rows, nonzero_cols = q_matrix.nonzero()
     unique_rows = np.unique(nonzero_rows)
-    np.random.shuffle(unique_rows) # shuffle the rows to prevent the same cycle in every epoch.
 
     for i in unique_rows: # improve Q and Ptranspose row by row, Q and P have the same dimensions, so this can be done in the same loop
-        row = ratings.getrow(i)
+        row = q_matrix.getrow(i)
         cols = row.indices
-        np.random.shuffle(cols) # shuffle the rows to prevent the same cycle in every epoch.
 
-        for x in cols:
-            known_rating = ratings[i, x] # Rix in formula
+        for f in cols:
 
-            for f in range(k):
-                q_value = q_matrix[i,f] # Qif in formula
-                p_value = pt_matrix[f,x] # Pxf in formula
+            original_row = ratings.getrow(i)
+            original_cols = original_row.indices
+            total_Q_sum = 0.0
+            q_value = q_matrix[i,f] # Qif in formula
+            for x in original_cols: # Loop over all nonzero column entries in original matrix
+                p_value = pt_matrix[f, x]
+                total_Q_sum += -2 * (ratings[i, x] - q_value * p_value) * p_value + 2 * hyperparam_1 * q_value
+            #total_Q_sum += 2 * hyperparam_1 * q_value
+            nabla_Q_matrix[i, f] = total_Q_sum
+            
 
-                update_nabla(i, 
-                             x,
-                             f, 
-                             (-2 * (known_rating - (q_value * p_value)) * p_value) + (2 * hyperparam_2 * q_value),
-                             (-2 * (known_rating - (p_value * q_value)) * q_value) + (2 * hyperparam_1 * p_value))
 
 
 def batch_gradient_descent(ratings: csr_matrix, q_matrix: csr_matrix, pt_matrix: csr_matrix, gradient_step: float, hyperparam_1: int, hyperparam_2: int):
@@ -281,11 +281,39 @@ def batch_gradient_descent(ratings: csr_matrix, q_matrix: csr_matrix, pt_matrix:
     nabla_Q_matrix = lil_matrix((q_matrix.shape[0], q_matrix.shape[1]), dtype=float)    # generate a new matrix to store the nabla q's in
     nabla_P_matrix = lil_matrix((pt_matrix.shape[0], pt_matrix.shape[1]), dtype=float)  # generate a new matrix to store the nabla p's in
     
-    def update_nabla(i, x, f, nabla_q, nabla_p):
-        nabla_Q_matrix[i, f] += (gradient_step * nabla_q)
-        nabla_P_matrix[f, x] += (gradient_step * nabla_p)
+    #def update_nabla(i, x, f, nabla_q, nabla_p):
+    #    nabla_Q_matrix[i, f] += (gradient_step * nabla_q)
+    #    nabla_P_matrix[f, x] += (gradient_step * nabla_p)
 
-    calculate_nabla_q_and_p(ratings, q_matrix, pt_matrix, update_nabla, hyperparam_1, hyperparam_2)
+    calculate_nabla_q(ratings, q_matrix, pt_matrix, hyperparam_1, nabla_Q_matrix)
+    calculate_nabla_p(ratings, q_matrix, pt_matrix, hyperparam_1, nabla_P_matrix)
+    Q_mean = nabla_Q_matrix.mean()
+    newQValue = gradient_step * Q_mean
+    P_mean = nabla_P_matrix.mean()
+    newPValue = gradient_step * P_mean
+
+    nabla_Q_matrix = nabla_Q_matrix.tocsr()
+    nabla_P_matrix = nabla_P_matrix.tocsr()
+    nonzero_rows, nonzero_cols = nabla_Q_matrix.nonzero()
+    unique_rows = np.unique(nonzero_rows)
+
+    for i in unique_rows: # improve Q and Ptranspose row by row, Q and P have the same dimensions, so this can be done in the same loop
+        row = nabla_Q_matrix.getrow(i)
+        cols = row.indices
+
+        for f in cols:
+            nabla_Q_matrix[i, f] = newQValue
+
+    nonzero_rows, nonzero_cols = nabla_P_matrix.nonzero()
+    unique_rows = np.unique(nonzero_rows)
+
+    for i in unique_rows: # improve Q and Ptranspose row by row, Q and P have the same dimensions, so this can be done in the same loop
+        row = nabla_P_matrix.getrow(i)
+        cols = row.indices
+
+        for f in cols:
+            nabla_P_matrix[i, f] = newPValue
+
 
     return np.subtract(q_matrix, nabla_Q_matrix), np.subtract(pt_matrix, nabla_P_matrix)
 
@@ -296,7 +324,7 @@ def stochastic_gradient_descent(ratings: csr_matrix, q_matrix: csr_matrix, pt_ma
         q_matrix[i, f] -= (gradient_step * nabla_q)
         pt_matrix[f, x] -= (gradient_step * nabla_p)
 
-    calculate_nabla_q_and_p(ratings, q_matrix, pt_matrix, update_nabla, hyperparam_1, hyperparam_2)
+    #calculate_nabla_q_and_p(ratings, q_matrix, pt_matrix, update_nabla, hyperparam_1, hyperparam_2)
 
 
 def calculate_accuracy(original_matrix: csr_matrix, q_matrix: csr_matrix, pt_matrix: csr_matrix) -> float:
@@ -305,6 +333,7 @@ def calculate_accuracy(original_matrix: csr_matrix, q_matrix: csr_matrix, pt_mat
     unique_rows = np.unique(nonzero_rows)
     total_sum = 0
     m_matrix = q_matrix @ pt_matrix
+    
     m_rows, m_cols = m_matrix.shape[0], m_matrix.shape[1]
     for x in unique_rows:
         # accomodate for the testing dataset containing higher dimensions, not used in training, this can happen because we can limit the training sampling to X lines per file
@@ -371,7 +400,7 @@ print("Current time - elapsed time since previous print")
 # Parameters:
 limit_entries = True    # Set this boolean to True to only read the first 'limit_size' amount of entries of each given file, set to False to read full files
 split_training = True   # True: split the Netflix dataset in a training and test dataset.
-limit_size = 1000       # Number of lines to read if limit_entries is set to true.
+limit_size = 2000       # Number of lines to read if limit_entries is set to true.
 
 # Execution:
 # Parse the following input files:
@@ -466,11 +495,11 @@ print()
 
 # TASK 3 - (Stochastic) Gradient Descent with Latent Factors
 # Parameters:
-epochs = 1                          # Control the number of epochs to execute
+epochs = 100                          # Control the number of epochs to execute
 stochastic_gradient_step = 0.00001  # Learning rate for stochastic gradient descent
 batch_gradient_step = 0.1           # Learning rate for batch gradient descent
 hyperparam_1, hyperparam_2 = 1, 1   # User set regularization parameters to accommodate for scarcity, can be used to shrink aggressively where data are scarce.
-k = 6
+k = 4
 #matrix_shape = movies_x_users.shape
 #k = max(1, (min(matrix_shape[0], matrix_shape[1]) - 1)) # Control the number of eigenvalues to be used in SVD, rule: 1 <= k <= kmax, with kmax is the smallest dimension of the matrix minus one
 
@@ -501,21 +530,21 @@ for i in range(epochs):
     t_epoch_start = get_and_print_time(None, None)
 
     # Run a full epoch of SGD:
-    stochastic_gradient_descent(movies_x_users, q_matrix, ptranspose_matrix, stochastic_gradient_step, hyperparam_1, hyperparam_2)
-    t_sgd_end = get_and_print_time("Finished epoch " + str(i+1) + " of stochastic gradient descent", t_epoch_start)
+    #stochastic_gradient_descent(movies_x_users, q_matrix, ptranspose_matrix, stochastic_gradient_step, hyperparam_1, hyperparam_2)
+    #t_sgd_end = get_and_print_time("Finished epoch " + str(i+1) + " of stochastic gradient descent", t_epoch_start)
 
     matrix_to_use_for_accurracy = movies_x_users
     if split_training:
         matrix_to_use_for_accurracy = movies_x_users_testing
 
     # Calculate RMSE of SGD
-    rmse_sgd = calculate_accuracy(matrix_to_use_for_accurracy, q_matrix, ptranspose_matrix)
-    RMSEs_SGD.append(rmse_sgd)
-    t_rmse_sgd = get_and_print_time("Calculated RMSE for SGD: " + str(rmse_sgd), t_sgd_end)
+    #rmse_sgd = calculate_accuracy(matrix_to_use_for_accurracy, q_matrix, ptranspose_matrix)
+    RMSEs_SGD.append(0)
+    #t_rmse_sgd = get_and_print_time("Calculated RMSE for SGD: " + str(rmse_sgd), t_epoch_start)
 
     # Run a full epoch of BGD
     q_matrix_for_BGD, ptranspose_matrix_for_BGD = batch_gradient_descent(movies_x_users, q_matrix_for_BGD, ptranspose_matrix_for_BGD, batch_gradient_step, hyperparam_1, hyperparam_2)
-    t_bgd_end = get_and_print_time("Finished epoch " + str(i+1) + " of batch gradient descent", t_rmse_sgd)
+    t_bgd_end = get_and_print_time("Finished epoch " + str(i+1) + " of batch gradient descent", t_epoch_start)
 
     # Calculate RMSE of BGD
     rmse_bgd = calculate_accuracy(matrix_to_use_for_accurracy, q_matrix_for_BGD, ptranspose_matrix_for_BGD)
